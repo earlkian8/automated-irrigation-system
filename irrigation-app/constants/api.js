@@ -1,0 +1,1 @@
+export const API_BASE = 'http://192.168.1.XXX:3000/api'; // ← your server's local IP
