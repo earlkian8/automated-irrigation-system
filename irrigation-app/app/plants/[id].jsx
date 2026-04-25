@@ -73,7 +73,7 @@ export default function PlantDetailScreen() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     waterScale.value = withSequence(withSpring(1.3), withSpring(1));
     try {
-      await triggerManualWater(plant.id, 150);
+      await triggerManualWater(plant.id, plant.config.waterAmount ?? 150);
       await refreshPlant(plant.id);
     } catch (e) {
       console.warn('Watering failed:', e.message);

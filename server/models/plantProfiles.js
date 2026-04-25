@@ -116,6 +116,10 @@ const POT_SIZE_DEFAULTS = {
 // Pump flow rate — calibrate this to your actual pump (ml per second)
 const PUMP_FLOW_RATE_ML_PER_SEC = 50;
 
+// Assumed inner diameter of standard drip irrigation tubing (mm)
+// Most indoor drip tubes are 4–8 mm; 6 mm is a common middle-ground default.
+const HOSE_INNER_DIAMETER_MM = 6;
+
 /**
  * Returns the profile for a given plant type.
  * Falls back to a safe "medium needs" default if type is unknown.
@@ -161,11 +165,21 @@ function deriveIrrigationParams(config) {
     Math.max(profile.minWaterAmount, rawAmount)
   );
 
-  const pumpDurationMs = Math.round((waterAmount / PUMP_FLOW_RATE_ML_PER_SEC) * 1000);
+  // Hose dead volume: the water that fills the tube before any reaches the plant.
+  // Volume = π × r² × length  (cm units throughout → result in ml, since 1 cm³ = 1 ml)
+  const hoseLengthCm   = config.hoseLengthCm ?? 0;
+  const hoseRadiusCm   = (HOSE_INNER_DIAMETER_MM / 10) / 2;
+  const hoseDeadVolumeMl = Math.round(Math.PI * hoseRadiusCm * hoseRadiusCm * hoseLengthCm);
+
+  // Pump must push waterAmount to the plant PLUS fill the hose dead volume first
+  const pumpDurationMs = Math.round(
+    ((waterAmount + hoseDeadVolumeMl) / PUMP_FLOW_RATE_ML_PER_SEC) * 1000
+  );
 
   return {
     moistureThreshold,
     waterAmount,
+    hoseDeadVolumeMl,
     pumpDurationMs,
     drainTimeSec:        profile.drainTimeSec,
     scheduleDefaultDays: profile.scheduleDefaultDays,
@@ -177,6 +191,7 @@ module.exports = {
   PLANT_PROFILES,
   POT_SIZE_DEFAULTS,
   PUMP_FLOW_RATE_ML_PER_SEC,
+  HOSE_INNER_DIAMETER_MM,
   getProfile,
   deriveIrrigationParams,
 };

@@ -75,7 +75,7 @@ function StatBadge({ icon: Icon, label, value, color }) {
 }
 
 // Live derived-params preview card shown below plant type + soil volume pickers
-function SmartDefaultsCard({ plantType, soilVolume, thresholdOverridden, manualThreshold }) {
+function SmartDefaultsCard({ plantType, soilVolume, thresholdOverridden, manualThreshold, hoseLengthCm }) {
   const [params, setParams] = useState(null);
   const [loading, setLoading] = useState(false);
 
@@ -89,6 +89,7 @@ function SmartDefaultsCard({ plantType, soilVolume, thresholdOverridden, manualT
         soilVolume: vol,
         thresholdOverridden,
         moistureThreshold: parseInt(manualThreshold) || 30,
+        hoseLengthCm: hoseLengthCm ?? 0,
       });
       setParams(p);
     } catch (_) {
@@ -96,7 +97,7 @@ function SmartDefaultsCard({ plantType, soilVolume, thresholdOverridden, manualT
     } finally {
       setLoading(false);
     }
-  }, [plantType, soilVolume, thresholdOverridden, manualThreshold]);
+  }, [plantType, soilVolume, thresholdOverridden, manualThreshold, hoseLengthCm]);
 
   useEffect(() => { refresh(); }, [refresh]);
 
@@ -148,6 +149,15 @@ function SmartDefaultsCard({ plantType, soilVolume, thresholdOverridden, manualT
             />
           </View>
 
+          {params.hoseDeadVolumeMl > 0 && (
+            <View style={styles.infoRow}>
+              <Info size={12} color="#fab387" />
+              <Text style={[styles.infoText, { color: '#fab387' }]}>
+                +{params.hoseDeadVolumeMl} ml hose dead volume included in pump duration.
+              </Text>
+            </View>
+          )}
+
           <View style={styles.infoRow}>
             <Info size={12} color={Colors.textSecondary} />
             <Text style={styles.infoText}>
@@ -174,6 +184,8 @@ export default function ConfigureScreen() {
   const [plantType, setPlantType]                 = useState('Fern');
   const [potSize, setPotSize]                     = useState('Medium');
   const [soilVolume, setSoilVolume]               = useState('500');
+  const [hoseLength, setHoseLength]               = useState('0');
+  const [hoseLengthUnit, setHoseLengthUnit]       = useState('cm');
   const [irrigationMode, setIrrigationMode]       = useState('Hybrid');
   const [scheduleType, setScheduleType]           = useState('Daily');
   const [scheduleDays, setScheduleDays]           = useState('1');
@@ -189,6 +201,8 @@ export default function ConfigureScreen() {
     setPlantType(plant.config.plantType            ?? 'Fern');
     setPotSize(plant.config.potSize                ?? 'Medium');
     setSoilVolume(String(plant.config.soilVolume   ?? 500));
+    setHoseLength(String(plant.config.hoseLengthCm ?? 0));
+    setHoseLengthUnit(plant.config.hoseLengthUnit  ?? 'cm');
     setIrrigationMode(plant.config.irrigationMode  ?? 'Hybrid');
     setScheduleType(plant.config.scheduleType      ?? 'Daily');
     setScheduleDays(String(plant.config.scheduleDays ?? 1));
@@ -208,6 +222,11 @@ export default function ConfigureScreen() {
     );
   }
 
+  // Convert hose length to cm regardless of which unit the user picked
+  const hoseLengthCm = hoseLengthUnit === 'inch'
+    ? Math.round((parseFloat(hoseLength) || 0) * 2.54)
+    : parseInt(hoseLength) || 0;
+
   const handleSave = async () => {
     if (isSaving) return;
     setIsSaving(true);
@@ -219,6 +238,8 @@ export default function ConfigureScreen() {
           plantType,
           potSize,
           soilVolume:          parseInt(soilVolume)      || 500,
+          hoseLengthCm,
+          hoseLengthUnit,
           irrigationMode,
           scheduleType,
           scheduleDays:        parseInt(scheduleDays)    || 1,
@@ -321,8 +342,12 @@ export default function ConfigureScreen() {
                 label="Pot Size"
                 options={POT_SIZES}
                 selected={potSize}
-                onSelect={v => { setPotSize(v); }}
-                hint="Used to estimate soil volume if not set manually."
+                onSelect={v => {
+                  setPotSize(v);
+                  const defaults = { Small: 300, Medium: 500, Large: 1000 };
+                  setSoilVolume(String(defaults[v]));
+                }}
+                hint="Selecting a size auto-fills soil volume below."
               />
 
               <View style={styles.fieldGroup}>
@@ -339,6 +364,40 @@ export default function ConfigureScreen() {
                   placeholderTextColor={Colors.textSecondary + '80'}
                 />
               </View>
+
+              <View style={styles.fieldGroup}>
+                <Text style={styles.fieldLabel}>Hose / Tube Length</Text>
+                <Text style={styles.fieldHint}>
+                  Pump runs extra time to fill the hose before water reaches the plant.
+                  Set to 0 if the pump is directly above the pot.
+                </Text>
+                <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+                  <TextInput
+                    style={[styles.textInput, { flex: 1 }]}
+                    value={hoseLength}
+                    onChangeText={setHoseLength}
+                    keyboardType="numeric"
+                    placeholder="e.g. 100"
+                    placeholderTextColor={Colors.textSecondary + '80'}
+                  />
+                  <View style={[styles.optionRow, { flexWrap: 'nowrap' }]}>
+                    {['cm', 'inch'].map(u => (
+                      <Pressable
+                        key={u}
+                        style={[styles.optionChip, hoseLengthUnit === u && styles.optionChipActive]}
+                        onPress={() => {
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                          setHoseLengthUnit(u);
+                        }}
+                      >
+                        <Text style={[styles.optionText, hoseLengthUnit === u && styles.optionTextActive]}>
+                          {u}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </View>
+              </View>
             </View>
 
             {/* ── Smart defaults preview ──────────────────── */}
@@ -347,6 +406,7 @@ export default function ConfigureScreen() {
               soilVolume={soilVolume}
               thresholdOverridden={thresholdOverridden}
               manualThreshold={manualThreshold}
+              hoseLengthCm={hoseLengthCm}
             />
 
             {/* ── Irrigation ──────────────────────────────── */}

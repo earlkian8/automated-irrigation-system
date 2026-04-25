@@ -1,10 +1,12 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
+#include <WiFiClientSecure.h>
 #include <ArduinoJson.h>
+#include <time.h>
 
-const char* SSID     = "IoThotspot";
-const char* PASSWORD = "Password-12345";
-const char* BASE_URL = "http://10.38.148.31:3000";
+const char* SSID     = "PLDTHOMEFIBRXTx5D";
+const char* PASSWORD = "PLDTWIFICjUs4";
+const char* BASE_URL = "https://shark-app-7yx5p.ondigitalocean.app";
 const int   PLANT_ID = 1;
 
 #define SENSOR_PIN  34
@@ -12,18 +14,40 @@ const int   PLANT_ID = 1;
 #define DRY_VALUE   2559
 #define WET_VALUE   1100
 
-String irrigationMode     = "Hybrid";
-String scheduleType       = "Daily";
-int    scheduleDays       = 1;
-String scheduleTime       = "08:00";
-int    moistureThreshold  = 35;
-int    pumpDurationMs     = 3000;
-int    drainTimeSec       = 15;
+String irrigationMode    = "Hybrid";
+String scheduleType      = "Daily";
+int    scheduleDays      = 1;
+String scheduleTime      = "08:00";
+int    moistureThreshold = 35;
+int    pumpDurationMs    = 3000;
+int    drainTimeSec      = 15;
+int    hoseLengthCm      = 0;
 
 bool          manualWaterCommand = false;
 unsigned long lastConfigFetch    = 0;
 const unsigned long CONFIG_INTERVAL = 2000;
 
+WiFiClientSecure secureClient;
+
+// ── NTP time sync ────────────────────────────────────────────────────────────
+void syncTime() {
+  configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+  Serial.print("Syncing time");
+  struct tm timeinfo;
+  int retries = 0;
+  while (!getLocalTime(&timeinfo) && retries < 20) {
+    Serial.print(".");
+    delay(500);
+    retries++;
+  }
+  if (retries < 20) {
+    Serial.println("\nTime synced!");
+  } else {
+    Serial.println("\nTime sync failed — continuing anyway");
+  }
+}
+
+// ── Sensor helpers ───────────────────────────────────────────────────────────
 int readSmoothed(int pin, int samples = 10) {
   long sum = 0;
   for (int i = 0; i < samples; i++) {
@@ -39,6 +63,7 @@ int getMoisturePercent() {
   return constrain(pct, 0, 100);
 }
 
+// ── WiFi ─────────────────────────────────────────────────────────────────────
 void connectWiFi() {
   WiFi.begin(SSID, PASSWORD);
   Serial.print("Connecting to WiFi");
@@ -51,11 +76,13 @@ void connectWiFi() {
   Serial.println(WiFi.localIP());
 }
 
+// ── HTTP helpers ─────────────────────────────────────────────────────────────
 void clearTriggerOnServer() {
   if (WiFi.status() != WL_CONNECTED) return;
+
   HTTPClient http;
   String url = String(BASE_URL) + "/api/plants/" + String(PLANT_ID) + "/clear-trigger";
-  http.begin(url);
+  http.begin(secureClient, url);
   http.addHeader("Content-Type", "application/json");
   int code = http.POST("{}");
   Serial.print("POST /clear-trigger: ");
@@ -68,7 +95,8 @@ void fetchConfig() {
 
   HTTPClient http;
   String url = String(BASE_URL) + "/api/plants/" + String(PLANT_ID);
-  http.begin(url);
+  http.begin(secureClient, url);
+  http.setTimeout(10000);
   int code = http.GET();
 
   if (code == 200) {
@@ -92,6 +120,7 @@ void fetchConfig() {
         moistureThreshold = config["moistureThreshold"] | moistureThreshold;
         pumpDurationMs    = config["pumpDurationMs"]    | pumpDurationMs;
         drainTimeSec      = config["drainTimeSec"]      | drainTimeSec;
+        hoseLengthCm      = config["hoseLengthCm"]      | hoseLengthCm;
       }
 
       Serial.println("=== Config refreshed ===");
@@ -99,11 +128,19 @@ void fetchConfig() {
       Serial.print("  threshold=");    Serial.print(moistureThreshold); Serial.println("%");
       Serial.print("  pumpDuration="); Serial.print(pumpDurationMs);    Serial.println("ms");
       Serial.print("  drainTime=");    Serial.print(drainTimeSec);      Serial.println("s");
+      Serial.print("  hoseLengthCm="); Serial.println(hoseLengthCm);
       Serial.print("  manual=");       Serial.println(manualWaterCommand);
+    } else {
+      Serial.print("JSON parse error: ");
+      Serial.println(err.c_str());
     }
   } else {
     Serial.print("Config fetch failed, HTTP: ");
     Serial.println(code);
+    if (code < 0) {
+      Serial.print("SSL/Connection error: ");
+      Serial.println(secureClient.lastError(nullptr, 0));
+    }
   }
 
   http.end();
@@ -114,8 +151,9 @@ void sendToBackend(int raw, int pct, bool pump) {
 
   HTTPClient http;
   String url = String(BASE_URL) + "/api/sensor";
-  http.begin(url);
+  http.begin(secureClient, url);
   http.addHeader("Content-Type", "application/json");
+  http.setTimeout(10000);
 
   StaticJsonDocument<128> doc;
   doc["raw"]      = raw;
@@ -131,6 +169,7 @@ void sendToBackend(int raw, int pct, bool pump) {
   http.end();
 }
 
+// ── Pump control ─────────────────────────────────────────────────────────────
 void pumpOn()  { digitalWrite(RELAY_PIN, LOW);  Serial.println("Pump: ON");  }
 void pumpOff() { digitalWrite(RELAY_PIN, HIGH); Serial.println("Pump: OFF"); }
 
@@ -150,6 +189,7 @@ void doWaterSession(const char* reason) {
   delay((unsigned long)drainTimeSec * 1000UL);
 }
 
+// ── Watering logic ───────────────────────────────────────────────────────────
 bool shouldWater(int moisture) {
   if (irrigationMode == "Manual") {
     if (manualWaterCommand) {
@@ -174,22 +214,36 @@ bool shouldWater(int moisture) {
   return false;
 }
 
+// ── Setup & loop ─────────────────────────────────────────────────────────────
 void setup() {
   Serial.begin(115200);
   pinMode(RELAY_PIN, OUTPUT);
   pumpOff();
+
   connectWiFi();
+  syncTime();
+
+  // Skip certificate verification — works with any Render/Let's Encrypt cert
+  // Replace with a pinned root CA in production if you want full validation
+  secureClient.setInsecure();
+
   fetchConfig();
 }
 
 void loop() {
+  // Reconnect WiFi if dropped
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("WiFi lost, reconnecting...");
+    connectWiFi();
+  }
+
   if (millis() - lastConfigFetch >= CONFIG_INTERVAL) {
     fetchConfig();
     lastConfigFetch = millis();
   }
 
-  int  raw      = readSmoothed(SENSOR_PIN);
-  int  moisture = getMoisturePercent();
+  int raw      = readSmoothed(SENSOR_PIN);
+  int moisture = getMoisturePercent();
 
   Serial.print("Raw: ");           Serial.print(raw);
   Serial.print(" | Moisture: ");   Serial.print(moisture);

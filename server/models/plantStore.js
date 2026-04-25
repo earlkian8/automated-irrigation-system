@@ -15,6 +15,7 @@ const ALLOWED_CONFIG = new Set([
   'plantType', 'potSize', 'soilVolume',
   'irrigationMode', 'scheduleType', 'scheduleDays',
   'scheduleTime', 'moistureThreshold', 'thresholdOverridden',
+  'hoseLengthCm', 'hoseLengthUnit',
 ]);
 
 const plants = [
@@ -103,8 +104,15 @@ const addWaterEvent = (id, type, amount) => {
   const event = { id: nextHistoryId++, type, timestamp: Date.now(), amount };
   plant.waterHistory.push(event);
   plant.lastWatered = Date.now();
-  const days = plant.config.scheduleDefaultDays ?? 1;
-  plant.nextIrrigation = Date.now() + days * 24 * 3600000;
+
+  // Use the user-configured schedule interval, not the plant profile default
+  let days = plant.config.scheduleDefaultDays ?? 1;
+  if (plant.config.scheduleType === 'Every X Days') {
+    days = plant.config.scheduleDays ?? days;
+  } else if (plant.config.scheduleType === 'Daily') {
+    days = 1;
+  }
+  plant.nextIrrigation = Date.now() + days * 24 * 3_600_000;
   return event;
 };
 
