@@ -114,7 +114,7 @@ const POT_SIZE_DEFAULTS = {
 };
 
 // Pump flow rate — calibrate this to your actual pump (ml per second)
-const PUMP_FLOW_RATE_ML_PER_SEC =25;
+const PUMP_FLOW_RATE_ML_PER_SEC =20;
 
 // Assumed inner diameter of standard drip irrigation tubing (mm)
 // Most indoor drip tubes are 4–8 mm; 6 mm is a common middle-ground default.
