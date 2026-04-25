@@ -6,7 +6,7 @@
 
 const char* SSID     = "Bancayrin Globe 2.4";
 const char* PASSWORD = "NeutronColt";
-const char* BASE_URL = "https://shark-app-7yx5p.ondigitalocean.app";
+const char* BASE_URL = "http://192.168.254.107:3000";
 const int   PLANT_ID = 1;
 
 #define SENSOR_PIN  34

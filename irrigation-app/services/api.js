@@ -1,5 +1,5 @@
 // services/api.js
-export const BASE_URL = 'https://shark-app-7yx5p.ondigitalocean.app';
+export const BASE_URL = 'http://192.168.254.105:3000';
 
 // Plants
 export const fetchAllPlants = async () => {
