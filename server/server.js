@@ -12,6 +12,9 @@ const app = express();
 app.use(express.json());
 app.use(cors({ origin: '*' }));
 
+// Health check — Digital Ocean pings this to confirm the service is up
+app.get('/health', (_req, res) => res.json({ status: 'ok' }));
+
 app.use('/api', sensorRoutes);
 app.use('/api', plantRoutes);
 app.use('/api', irrigationRoutes);
