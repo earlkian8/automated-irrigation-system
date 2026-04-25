@@ -2,9 +2,9 @@
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 
-const char* SSID     = "PLDTHOMEFIBRXTx5D";
-const char* PASSWORD = "PLDTWIFICjUs4";
-const char* BASE_URL = "http://192.168.1.29:3000";
+const char* SSID     = "IoThotspot";
+const char* PASSWORD = "Password-12345";
+const char* BASE_URL = "http://10.38.148.31:3000";
 const int   PLANT_ID = 1;
 
 #define SENSOR_PIN  34
