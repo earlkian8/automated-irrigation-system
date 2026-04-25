@@ -13,7 +13,7 @@ module.exports = {
   // Called by ESP32 POST /api/sensor
   // Only telemetry fields are forwarded — config is never touched here.
   saveReading: ({ raw, moisture, pump }) => {
-    sensorStore.set({ raw, moisture, pump, timestamp: new Date().toISOString() });
+    sensorStore.set({ raw, moisture, pump, timestamp: new Date().toISOString() }, 1);
 
     // updateSensorData uses a whitelist — config fields are safe
     plantStore.updateSensorData(1, {

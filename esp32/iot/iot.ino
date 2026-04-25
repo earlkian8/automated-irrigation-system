@@ -4,8 +4,8 @@
 #include <ArduinoJson.h>
 #include <time.h>
 
-const char* SSID     = "PLDTHOMEFIBRXTx5D";
-const char* PASSWORD = "PLDTWIFICjUs4";
+const char* SSID     = "Bancayrin Globe 2.4";
+const char* PASSWORD = "NeutronColt";
 const char* BASE_URL = "https://shark-app-7yx5p.ondigitalocean.app";
 const int   PLANT_ID = 1;
 

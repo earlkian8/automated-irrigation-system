@@ -43,6 +43,13 @@ export const previewIrrigationParams = async (config) => {
   return res.json();
 };
 
+// Analytics summary (DB-backed: weekly water, health, moisture history)
+export const fetchAnalyticsSummary = async () => {
+  const res = await fetch(`${BASE_URL}/api/analytics/summary`);
+  if (!res.ok) throw new Error('Failed to fetch analytics');
+  return res.json();
+};
+
 // Manual water trigger
 export const triggerManualWater = async (id, amount) => {
   const res = await fetch(`${BASE_URL}/api/plants/${id}/water`, {
