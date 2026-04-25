@@ -1,5 +1,5 @@
 // services/api.js
-export const BASE_URL = 'http://10.246.193.31:3000';
+export const BASE_URL = 'http://192.168.1.29:3000';
 
 // Plants
 export const fetchAllPlants = async () => {
