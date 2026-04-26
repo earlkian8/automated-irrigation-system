@@ -1,5 +1,5 @@
 // services/api.js
-export const BASE_URL = 'http://urchin-app-idc22.ondigitalocean.app';
+export const BASE_URL = 'https://urchin-app-idc22.ondigitalocean.app';
 
 // Plants
 export const fetchAllPlants = async () => {
@@ -58,5 +58,12 @@ export const triggerManualWater = async (id, amount) => {
     body: JSON.stringify({ amount }),
   });
   if (!res.ok) throw new Error('Failed to trigger watering');
+  return res.json();
+};
+
+// Activity log (excludes noisy sensor_reading entries)
+export const fetchActivityLog = async (limit = 50) => {
+  const res = await fetch(`${BASE_URL}/api/activity?limit=${limit}`);
+  if (!res.ok) throw new Error('Failed to fetch activity log');
   return res.json();
 };

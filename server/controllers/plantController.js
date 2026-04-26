@@ -1,5 +1,6 @@
 // controllers/plantController.js
 const plantService = require('../services/plantService');
+const plantStore   = require('../models/plantStore');
 
 module.exports = {
   getAll: (req, res) => {
@@ -16,6 +17,7 @@ module.exports = {
   updateConfig: (req, res) => {
     const updated = plantService.updateConfig(req.params.id, req.body);
     if (!updated) return res.status(404).json({ error: 'Plant not found' });
+    plantStore.logActivity(req.params.id, 'config_change', req.body);
     res.json(updated);
   },
 

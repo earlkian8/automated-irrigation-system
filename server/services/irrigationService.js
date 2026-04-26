@@ -27,6 +27,7 @@ module.exports = {
     console.log('[irrigationService] manualTrigger set to:', plantStore.getById(plantId).manualTrigger);
 
     const event = plantStore.addWaterEvent(plantId, 'manual', amount);
+    plantStore.logActivity(plantId, 'manual_irrigation', { amount });
 
     console.log('[irrigationService] manualTrigger after addWaterEvent:', plantStore.getById(plantId).manualTrigger);
 

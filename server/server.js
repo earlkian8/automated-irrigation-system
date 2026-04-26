@@ -5,8 +5,8 @@ const sensorRoutes     = require('./routes/sensorRoutes');
 const plantRoutes      = require('./routes/plantRoutes');
 const irrigationRoutes = require('./routes/irrigationRoutes');
 const analyticsRoutes  = require('./routes/analyticsRoutes');
-const { startScheduler } = require('./services/scheduleService');
-const { initFromDB }     = require('./models/plantStore');
+const { startScheduler }      = require('./services/scheduleService');
+const { initFromDB, logActivity } = require('./models/plantStore');
 
 const app = express();
 app.use(express.json());
@@ -25,4 +25,5 @@ app.listen(PORT, '0.0.0.0', async () => {
   console.log(`Server running on port ${PORT}`);
   await initFromDB();   // hydrate in-memory cache from DB before accepting requests
   startScheduler();
+  logActivity(null, 'server_start', { port: PORT });
 });

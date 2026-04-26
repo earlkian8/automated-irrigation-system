@@ -32,6 +32,7 @@ function tick() {
     plant.lastScheduledAt = Date.now();
     plantStore.setManualTrigger(plant.id, true);
     plantStore.addWaterEvent(plant.id, 'automatic', cfg.waterAmount ?? 150);
+    plantStore.logActivity(plant.id, 'scheduled_irrigation', { scheduleTime: hhmm, amount: cfg.waterAmount ?? 150 });
     console.log(`[scheduler] plant ${plant.id} ("${plant.name}") triggered at UTC ${hhmm}`);
   }
 }

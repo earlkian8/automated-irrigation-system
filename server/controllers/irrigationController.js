@@ -21,6 +21,7 @@ module.exports = {
     const plant = plantStore.getById(req.params.id);
     if (!plant) return res.status(404).json({ error: 'Plant not found' });
     plantStore.setManualTrigger(req.params.id, false);
+    plantStore.logActivity(req.params.id, 'trigger_cleared', {});
     console.log(`Manual trigger cleared for plant ${req.params.id}`);
     res.json({ ok: true });
   },

@@ -3,8 +3,8 @@ import StatCard from '@/components/analytics/statscard';
 import WeeklyChart from '@/components/analytics/weeklychart';
 import Colors from '@/constants/colors';
 import { PlantContext } from '@/context/PlantContext';
-import { fetchAnalyticsSummary } from '@/services/api';
-import { Droplet, Droplets, Leaf } from 'lucide-react-native';
+import { fetchActivityLog, fetchAnalyticsSummary } from '@/services/api';
+import { Activity, Droplet, Droplets, Leaf, Settings, Server, Zap } from 'lucide-react-native';
 import React, { useCallback, useContext, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -16,22 +16,39 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+function activityMeta(eventType) {
+  switch (eventType) {
+    case 'manual_irrigation':    return { icon: Droplet,   label: 'Manual Water',     color: Colors.moisture };
+    case 'auto_irrigation':      return { icon: Zap,       label: 'Auto Water',       color: Colors.primary };
+    case 'scheduled_irrigation': return { icon: Zap,       label: 'Scheduled Water',  color: Colors.primary };
+    case 'config_change':        return { icon: Settings,  label: 'Config Updated',   color: '#FFB74D' };
+    case 'trigger_cleared':      return { icon: Droplets,  label: 'Trigger Cleared',  color: '#89b4fa' };
+    case 'server_start':         return { icon: Server,    label: 'Server Start',     color: '#A0A0A0' };
+    default:                     return { icon: Activity,  label: eventType,          color: '#A0A0A0' };
+  }
+}
+
 export default function Analytics() {
   const insets = useSafeAreaInsets();
   const { plants } = useContext(PlantContext);  // live moisture for health overview
 
-  const [summary, setSummary]     = useState(null);
-  const [loading, setLoading]     = useState(true);
+  const [summary, setSummary]       = useState(null);
+  const [activity, setActivity]     = useState([]);
+  const [loading, setLoading]       = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [error, setError]         = useState(null);
+  const [error, setError]           = useState(null);
 
   const load = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
     else setLoading(true);
     setError(null);
     try {
-      const data = await fetchAnalyticsSummary();
+      const [data, log] = await Promise.all([
+        fetchAnalyticsSummary(),
+        fetchActivityLog(50),
+      ]);
       setSummary(data);
+      setActivity(log);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -122,6 +139,33 @@ export default function Analytics() {
               </View>
             );
           })}
+
+          {/* ── Recent activity log ── */}
+          {activity.length > 0 && (
+            <View style={styles.activityCard}>
+              <View style={styles.activityHeader}>
+                <Activity size={15} color={Colors.primary} />
+                <Text style={styles.activityTitle}>Recent Activity</Text>
+              </View>
+              {activity.map((entry) => {
+                const { icon: Icon, label, color } = activityMeta(entry.event_type);
+                return (
+                  <View key={entry.id} style={styles.activityRow}>
+                    <View style={[styles.activityDot, { backgroundColor: color + '20' }]}>
+                      <Icon size={13} color={color} />
+                    </View>
+                    <View style={styles.activityInfo}>
+                      <Text style={styles.activityLabel}>{label}</Text>
+                      <Text style={styles.activityTime}>
+                        {new Date(entry.occurred_at).toLocaleDateString()} {' '}
+                        {new Date(entry.occurred_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </Text>
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          )}
         </>
       ) : null}
     </ScrollView>
@@ -143,4 +187,12 @@ const styles = StyleSheet.create({
   plantCardRow:     { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 5, borderBottomWidth: 1, borderBottomColor: Colors.border },
   plantCardLabel:   { fontSize: 13, color: Colors.textSecondary },
   plantCardValue:   { fontSize: 13, fontWeight: '600', color: Colors.text },
+  activityCard:     { backgroundColor: Colors.card, borderRadius: 16, padding: 16, marginBottom: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8, elevation: 2 },
+  activityHeader:   { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12 },
+  activityTitle:    { fontSize: 15, fontWeight: '700', color: Colors.text },
+  activityRow:      { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: Colors.border },
+  activityDot:      { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  activityInfo:     { flex: 1 },
+  activityLabel:    { fontSize: 13, fontWeight: '600', color: Colors.text },
+  activityTime:     { fontSize: 11, color: Colors.textSecondary, marginTop: 1 },
 });

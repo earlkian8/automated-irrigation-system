@@ -213,6 +213,17 @@ const setManualTrigger = (id, value) => {
   return plant;
 };
 
+const logActivity = (plantId, eventType, details = '') => {
+  pool.query(
+    'INSERT INTO activity_log (plant_id, event_type, details, occurred_at) VALUES ($1,$2,$3,NOW())',
+    [
+      plantId != null ? parseInt(plantId) : null,
+      eventType,
+      typeof details === 'object' ? JSON.stringify(details) : details,
+    ]
+  ).catch(err => console.error('[plantStore] logActivity failed:', err.message));
+};
+
 module.exports = {
   initFromDB,
   getAll,
@@ -221,4 +232,5 @@ module.exports = {
   updateSensorData,
   addWaterEvent,
   setManualTrigger,
+  logActivity,
 };

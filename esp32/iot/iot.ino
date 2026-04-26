@@ -6,7 +6,7 @@
 
 const char* SSID     = "Bancayrin Globe 2.4";
 const char* PASSWORD = "NeutronColt";
-const char* BASE_URL = "http://urchin-app-idc22.ondigitalocean.app/";
+const char* BASE_URL = "https://urchin-app-idc22.ondigitalocean.app";
 const int   PLANT_ID = 1;
 
 #define SENSOR_PIN  34
