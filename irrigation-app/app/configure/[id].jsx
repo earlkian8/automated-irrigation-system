@@ -51,7 +51,24 @@ const SCHEDULE_RECS = {
   'Cactus':       { type: 'Every X Days', days: 21, note: 'Water sparingly — once every 3 weeks in spring/summer.' },
 };
 
-function getNextWateringLabel(scheduleType, scheduleTime, scheduleDays) {
+function getNextWateringLabel(scheduleType, scheduleTime, scheduleDays, customInfo) {
+  if (scheduleType === 'Custom') {
+    if (!customInfo) return null;
+    if (customInfo.mode === 'quick_fire') {
+      const mins = customInfo.delayMinutes || 5;
+      return `~${mins} min after saving · Demo mode`;
+    }
+    if (customInfo.mode === 'days_of_week' && customInfo.days?.length > 0) {
+      const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      const [h, m] = scheduleTime.split(':').map(Number);
+      if (isNaN(h) || isNaN(m)) return null;
+      const timeStr = new Date(0, 0, 0, h, m).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+      const days = [...customInfo.days].sort((a, b) => a - b).map(d => DAY_NAMES[d]).join(', ');
+      return `${days} at ${timeStr}`;
+    }
+    return null;
+  }
+
   const now  = new Date();
   const [h, m] = scheduleTime.split(':').map(Number);
   if (isNaN(h) || isNaN(m)) return null;
@@ -277,19 +294,20 @@ function TimePicker({ value, onChange }) {
   );
 }
 
-// ── Day interval stepper ──────────────────────────────────
-function DayStepper({ value, onChange }) {
-  const n = parseInt(value) || 1;
-  const dec = () => { if (n > 1) { onChange(String(n - 1)); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); } };
+// ── Day/Minute stepper ────────────────────────────────────
+function DayStepper({ value, onChange, unit, minVal = 1 }) {
+  const n = parseInt(value) || minVal;
+  const unitLabel = unit ?? (n !== 1 ? 'days' : 'day');
+  const dec = () => { if (n > minVal) { onChange(String(n - 1)); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); } };
   const inc = () => { onChange(String(n + 1)); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); };
   return (
     <View style={styles.stepper}>
-      <Pressable onPress={dec} style={[styles.stepBtn, n <= 1 && styles.stepBtnDisabled]} disabled={n <= 1}>
-        <Minus size={16} color={n <= 1 ? Colors.border : Colors.primary} />
+      <Pressable onPress={dec} style={[styles.stepBtn, n <= minVal && styles.stepBtnDisabled]} disabled={n <= minVal}>
+        <Minus size={16} color={n <= minVal ? Colors.border : Colors.primary} />
       </Pressable>
       <View style={styles.stepValue}>
         <Text style={styles.stepValueText}>{n}</Text>
-        <Text style={styles.stepValueUnit}>day{n !== 1 ? 's' : ''}</Text>
+        <Text style={styles.stepValueUnit}>{unitLabel}</Text>
       </View>
       <Pressable onPress={inc} style={styles.stepBtn}>
         <Plus size={16} color={Colors.primary} />
@@ -317,6 +335,9 @@ export default function ConfigureScreen() {
   const [scheduleType, setScheduleType]           = useState('Daily');
   const [scheduleDays, setScheduleDays]           = useState('1');
   const [scheduleTime, setScheduleTime]           = useState('08:00');
+  const [customMode, setCustomMode]               = useState('quick_fire');
+  const [customDelayMinutes, setCustomDelayMinutes] = useState('5');
+  const [customDaysOfWeek, setCustomDaysOfWeek]   = useState([]);
   const [thresholdOverridden, setThresholdOverridden] = useState(false);
   const [manualThreshold, setManualThreshold]     = useState('30');
   const [isSaving, setIsSaving]                   = useState(false);
@@ -354,6 +375,14 @@ export default function ConfigureScreen() {
     setScheduleTime(plant.config.scheduleTime      ?? '08:00');
     setThresholdOverridden(plant.config.thresholdOverridden ?? false);
     setManualThreshold(String(plant.config.moistureThreshold ?? 30));
+    if (plant.config.customConfig) {
+      try {
+        const cc = JSON.parse(plant.config.customConfig);
+        if (cc.mode) setCustomMode(cc.mode);
+        if (cc.delayMinutes) setCustomDelayMinutes(String(cc.delayMinutes));
+        if (Array.isArray(cc.days)) setCustomDaysOfWeek(cc.days);
+      } catch (_) {}
+    }
   }, [plant?.id]); // only re-seed on plant ID change
 
   if (!plant) {
@@ -389,6 +418,13 @@ export default function ConfigureScreen() {
           scheduleType,
           scheduleDays:        parseInt(scheduleDays)    || 1,
           scheduleTime,
+          customConfig: scheduleType === 'Custom'
+            ? JSON.stringify({
+                mode: customMode,
+                ...(customMode === 'quick_fire'   ? { delayMinutes: parseInt(customDelayMinutes) || 5 } : {}),
+                ...(customMode === 'days_of_week' ? { days: customDaysOfWeek }                          : {}),
+              })
+            : null,
           thresholdOverridden,
           moistureThreshold:   parseInt(manualThreshold) || 30,
         })
@@ -666,11 +702,91 @@ export default function ConfigureScreen() {
               )}
 
               {scheduleType === 'Custom' && (
-                <View style={[styles.fieldGroup, styles.customPlaceholder]}>
-                  <Info size={14} color={Colors.textSecondary} />
-                  <Text style={styles.customPlaceholderText}>
-                    Custom scheduling coming soon. Use Daily or Interval for now.
-                  </Text>
+                <View style={styles.fieldGroup}>
+                  {/* Sub-mode selector */}
+                  <Text style={styles.fieldLabel}>Custom mode</Text>
+                  <View style={styles.scheduleTypeRow}>
+                    {[
+                      { key: 'quick_fire',   icon: Zap,         label: 'Quick Fire'   },
+                      { key: 'days_of_week', icon: CalendarDays, label: 'Days of Week' },
+                    ].map(({ key, icon: Icon, label }) => {
+                      const active = customMode === key;
+                      return (
+                        <Pressable
+                          key={key}
+                          style={[styles.scheduleTypeChip, active && styles.scheduleTypeChipActive]}
+                          onPress={() => { setCustomMode(key); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
+                        >
+                          <Icon size={14} color={active ? Colors.white : Colors.textSecondary} />
+                          <Text style={[styles.scheduleTypeLabel, active && styles.scheduleTypeLabelActive]}>
+                            {label}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+
+                  {/* ── Quick Fire ── */}
+                  {customMode === 'quick_fire' && (
+                    <View style={styles.customSection}>
+                      <View style={styles.demoBadge}>
+                        <Zap size={11} color="#D97706" />
+                        <Text style={styles.demoBadgeText}>One-time trigger · Resets after use</Text>
+                      </View>
+                      <Text style={[styles.fieldLabel, { marginTop: 14 }]}>Fire in</Text>
+                      <DayStepper
+                        value={customDelayMinutes}
+                        onChange={setCustomDelayMinutes}
+                        minVal={1}
+                        unit="min"
+                      />
+                      <View style={styles.presetsRow}>
+                        {['1', '5', '10', '30'].map(m => (
+                          <Pressable
+                            key={m}
+                            style={[styles.presetChip, customDelayMinutes === m && styles.presetChipActive]}
+                            onPress={() => { setCustomDelayMinutes(m); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
+                          >
+                            <Text style={[styles.presetLabel, customDelayMinutes === m && styles.presetLabelActive]}>
+                              {m}m
+                            </Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    </View>
+                  )}
+
+                  {/* ── Days of Week ── */}
+                  {customMode === 'days_of_week' && (
+                    <View style={styles.customSection}>
+                      <Text style={[styles.fieldLabel, { marginTop: 14 }]}>Water on these days</Text>
+                      <View style={styles.dayChipsRow}>
+                        {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, i) => {
+                          const sel = customDaysOfWeek.includes(i);
+                          return (
+                            <Pressable
+                              key={i}
+                              style={[styles.dayChip, sel && styles.dayChipActive]}
+                              onPress={() => {
+                                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                setCustomDaysOfWeek(prev =>
+                                  sel ? prev.filter(d => d !== i) : [...prev, i].sort((a, b) => a - b)
+                                );
+                              }}
+                            >
+                              <Text style={[styles.dayChipLabel, sel && styles.dayChipLabelActive]}>
+                                {day}
+                              </Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                      {customDaysOfWeek.length === 0 && (
+                        <Text style={styles.customHint}>Select at least one day</Text>
+                      )}
+                      <Text style={styles.customHint}>Uses the watering time set below ↓</Text>
+                    </View>
+                  )}
                 </View>
               )}
 
@@ -682,7 +798,12 @@ export default function ConfigureScreen() {
 
               {/* Next watering preview */}
               {(() => {
-                const label = getNextWateringLabel(scheduleType, scheduleTime, scheduleDays);
+                const label = getNextWateringLabel(
+                  scheduleType, scheduleTime, scheduleDays,
+                  scheduleType === 'Custom'
+                    ? { mode: customMode, delayMinutes: parseInt(customDelayMinutes) || 5, days: customDaysOfWeek }
+                    : null
+                );
                 if (!label) return null;
                 return (
                   <View style={styles.nextWaterPreview}>
@@ -926,16 +1047,85 @@ const styles = StyleSheet.create({
   nextWaterText: { fontSize: 12, color: Colors.textSecondary, flex: 1 },
   nextWaterBold: { fontWeight: '700', color: Colors.primary },
 
-  // Custom schedule placeholder
-  customPlaceholder: {
+  // Custom schedule
+  customSection: {
+    marginTop: 12,
+  },
+  demoBadge: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#FEF3C7',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: '#FCD34D',
+  },
+  demoBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#92400E',
+  },
+  presetsRow: {
+    flexDirection: 'row',
     gap: 8,
-    backgroundColor: Colors.background,
+    marginTop: 12,
+    flexWrap: 'wrap',
+  },
+  presetChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
     borderRadius: 10,
-    padding: 12,
+    backgroundColor: Colors.background,
     borderWidth: 1,
     borderColor: Colors.border,
   },
-  customPlaceholderText: { fontSize: 12, color: Colors.textSecondary, flex: 1, lineHeight: 17 },
+  presetChipActive: {
+    backgroundColor: Colors.primary + '15',
+    borderColor: Colors.primary,
+  },
+  presetLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: Colors.textSecondary,
+  },
+  presetLabelActive: {
+    color: Colors.primary,
+  },
+  dayChipsRow: {
+    flexDirection: 'row',
+    gap: 6,
+    marginTop: 4,
+    marginBottom: 6,
+  },
+  dayChip: {
+    flex: 1,
+    aspectRatio: 1,
+    borderRadius: 10,
+    backgroundColor: Colors.background,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  dayChipActive: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  dayChipLabel: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: Colors.textSecondary,
+  },
+  dayChipLabelActive: {
+    color: Colors.white,
+  },
+  customHint: {
+    fontSize: 11,
+    color: Colors.textSecondary,
+    marginTop: 4,
+    lineHeight: 16,
+  },
 });

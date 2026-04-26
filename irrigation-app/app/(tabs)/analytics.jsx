@@ -1,3 +1,4 @@
+import AppHeader from '@/components/AppHeader';
 import StatCard from '@/components/analytics/statscard';
 import WeeklyChart from '@/components/analytics/weeklychart';
 import Colors from '@/constants/colors';
@@ -84,10 +85,12 @@ export default function Analytics() {
         />
       }
     >
-      {/* ── Header ── */}
-      <View style={[styles.header, { paddingTop: insets.top + 18 }]}>
-        <Text style={styles.pageTitle}>Analytics</Text>
-        <Text style={styles.pageSub}>Pull down to refresh</Text>
+      {/* ── App brand header ── */}
+      <View style={{ paddingTop: 10 }}>
+        <AppHeader
+          title="Analytics"
+          subtitle="Water usage & activity history"
+        />
       </View>
 
       {/* ── Live plant health ── */}
@@ -223,10 +226,6 @@ const styles = StyleSheet.create({
   screen:   { flex: 1, backgroundColor: Colors.background },
   scroll:   { paddingHorizontal: 20 },
   centered: { alignItems: 'center', paddingVertical: 32 },
-
-  header:    { marginBottom: 20 },
-  pageTitle: { fontSize: 26, fontWeight: '800', color: Colors.text, letterSpacing: -0.6 },
-  pageSub:   { fontSize: 13, color: Colors.textSecondary, marginTop: 3, fontWeight: '500' },
 
   card:      { ...CARD },
   cardTitle: { fontSize: 10, fontWeight: '800', color: Colors.textSecondary, textTransform: 'uppercase', letterSpacing: 1.4, marginBottom: 14 },

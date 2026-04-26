@@ -20,7 +20,7 @@ const ALLOWED_CONFIG = new Set([
   'plantType', 'potSize', 'soilVolume',
   'irrigationMode', 'scheduleType', 'scheduleDays',
   'scheduleTime', 'moistureThreshold', 'thresholdOverridden',
-  'hoseLengthCm', 'hoseLengthUnit',
+  'hoseLengthCm', 'hoseLengthUnit', 'customConfig',
 ]);
 
 // ── DB helpers ────────────────────────────────────────────────────────────────
@@ -56,6 +56,7 @@ function rowToPlant(row, events = []) {
       pumpDurationMs:      row.pump_duration_ms,
       drainTimeSec:        row.drain_time_sec,
       scheduleDefaultDays: row.schedule_default_days,
+      customConfig:        row.custom_config ?? null,
     },
   };
 }
@@ -99,14 +100,14 @@ function persistConfig(plant) {
        irrigation_mode=$5, schedule_type=$6, schedule_days=$7, schedule_time=$8,
        threshold_overridden=$9, hose_length_cm=$10, hose_length_unit=$11,
        moisture_threshold=$12, water_amount=$13, pump_duration_ms=$14,
-       drain_time_sec=$15, schedule_default_days=$16, updated_at=NOW()
-     WHERE id=$17`,
+       drain_time_sec=$15, schedule_default_days=$16, custom_config=$17, updated_at=NOW()
+     WHERE id=$18`,
     [
       plant.name, c.plantType, c.potSize, c.soilVolume,
       c.irrigationMode, c.scheduleType, c.scheduleDays, c.scheduleTime,
       c.thresholdOverridden, c.hoseLengthCm, c.hoseLengthUnit,
       c.moistureThreshold, c.waterAmount, c.pumpDurationMs,
-      c.drainTimeSec, c.scheduleDefaultDays, plant.id,
+      c.drainTimeSec, c.scheduleDefaultDays, c.customConfig ?? null, plant.id,
     ]
   ).catch(err => console.error('[plantStore] persistConfig failed:', err.message));
 }

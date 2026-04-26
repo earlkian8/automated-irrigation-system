@@ -1,4 +1,5 @@
 // app/(tabs)/dashboard.jsx  — single-plant view
+import AppHeader from '@/components/AppHeader';
 import Colors from '@/constants/colors';
 import { PlantContext } from '@/context/PlantContext';
 import { triggerManualWater } from '@/services/api';
@@ -188,7 +189,7 @@ export default function Dashboard() {
   const history = [...(plant.waterHistory ?? [])].reverse().slice(0, 5);
 
   return (
-    <View style={[styles.screen, { paddingTop: insets.top }]}>
+    <View style={[styles.screen, { paddingTop: 10 }]}>
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[
@@ -196,7 +197,13 @@ export default function Dashboard() {
           { paddingBottom: Platform.OS === 'web' ? 34 : insets.bottom + 20 },
         ]}
       >
-        {/* ── Header ── */}
+        {/* ── App brand header ── */}
+        <AppHeader
+          title="Dashboard"
+          subtitle="Your plant's live status"
+        />
+
+        {/* ── Plant bar ── */}
         <View style={styles.topBar}>
           <View style={{ flex: 1, marginRight: 12 }}>
             <Text style={styles.plantName} numberOfLines={1}>{plant.name}</Text>

@@ -1,0 +1,1 @@
+ALTER TABLE plants ADD COLUMN IF NOT EXISTS custom_config TEXT;
