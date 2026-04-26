@@ -1,10 +1,11 @@
 // app/configure/[id].jsx
 import Colors from '@/constants/colors';
+import PlantScanModal from '@/components/PlantScanModal';
 import { PlantContext } from '@/context/PlantContext';
 import { previewIrrigationParams, saveConfig } from '@/services/api';
 import * as Haptics from 'expo-haptics';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { CalendarDays, Check, ChevronDown, ChevronUp, Clock, Droplet, Info, Leaf, Minus, Plus, Sparkles, Thermometer, X, Zap } from 'lucide-react-native';
+import { CalendarDays, Check, ChevronDown, ChevronUp, Clock, Droplet, Info, Leaf, Minus, Plus, ScanLine, Sparkles, Thermometer, X, Zap } from 'lucide-react-native';
 import React, { useCallback, useContext, useEffect, useState } from 'react';
 import {
   ActivityIndicator, Platform, Pressable, ScrollView,
@@ -319,6 +320,24 @@ export default function ConfigureScreen() {
   const [thresholdOverridden, setThresholdOverridden] = useState(false);
   const [manualThreshold, setManualThreshold]     = useState('30');
   const [isSaving, setIsSaving]                   = useState(false);
+  const [scanOpen, setScanOpen]                   = useState(false);
+
+  // Called when user taps "Apply Configuration" in the scan modal
+  const handleScanApply = useCallback((detected) => {
+    if (detected.plantType)    setPlantType(detected.plantType);
+    if (detected.potSize)      setPotSize(detected.potSize);
+    if (detected.irrigationMode) setIrrigationMode(detected.irrigationMode);
+    if (detected.scheduleType) setScheduleType(detected.scheduleType);
+    if (detected.scheduleDays) setScheduleDays(detected.scheduleDays);
+    if (detected.scheduleTime) setScheduleTime(detected.scheduleTime);
+    if (detected.name)         setName(detected.name);
+    // Auto-fill soil volume from pot size defaults
+    const volDefaults = { Small: 300, Medium: 500, Large: 1000 };
+    if (detected.potSize && volDefaults[detected.potSize]) {
+      setSoilVolume(String(volDefaults[detected.potSize]));
+    }
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  }, []);
 
   // Seed form only when navigating to a new plant, not on every 5s poll
   useEffect(() => {
@@ -409,6 +428,32 @@ export default function ConfigureScreen() {
           keyboardShouldPersistTaps="handled"
         >
           <View style={{ paddingTop: 8 }}>
+
+            {/* ── AI Plant Scanner ───────────────────���────── */}
+            <Pressable
+              style={styles.scanCard}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                setScanOpen(true);
+              }}
+            >
+              <View style={styles.scanCardIcon}>
+                <ScanLine size={20} color={Colors.primary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.scanCardTitle}>Scan Plant</Text>
+                <Text style={styles.scanCardSub}>Use AI to auto-fill configuration from a photo</Text>
+              </View>
+              <View style={styles.scanCardBadge}>
+                <Text style={styles.scanCardBadgeText}>AI</Text>
+              </View>
+            </Pressable>
+
+            <PlantScanModal
+              visible={scanOpen}
+              onClose={() => setScanOpen(false)}
+              onApply={handleScanApply}
+            />
 
             {/* ── Plant identity ──────────────────────────── */}
             <View style={styles.card}>
@@ -724,6 +769,26 @@ const styles = StyleSheet.create({
   optionText:      { fontSize: 14, fontWeight: '600', color: Colors.text },
   optionTextActive:{ color: Colors.white },
   toggleRow:       { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  // Scan card
+  scanCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 14,
+    backgroundColor: Colors.primary + '0C',
+    borderRadius: 18, padding: 16, marginBottom: 14,
+    borderWidth: 1.5, borderColor: Colors.primary + '30',
+  },
+  scanCardIcon: {
+    width: 44, height: 44, borderRadius: 14,
+    backgroundColor: Colors.primary + '18',
+    justifyContent: 'center', alignItems: 'center',
+  },
+  scanCardTitle: { fontSize: 15, fontWeight: '800', color: Colors.primary, marginBottom: 2 },
+  scanCardSub:   { fontSize: 12, color: Colors.textSecondary, fontWeight: '500' },
+  scanCardBadge: {
+    backgroundColor: Colors.primary, borderRadius: 8,
+    paddingHorizontal: 8, paddingVertical: 4,
+  },
+  scanCardBadgeText: { fontSize: 11, fontWeight: '800', color: '#fff', letterSpacing: 0.5 },
+
   // Smart defaults card
   smartCard:       { backgroundColor: Colors.card, borderRadius: 18, padding: 16, marginBottom: 16, borderWidth: 1.5, borderColor: Colors.primary + '30' },
   smartCardHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10 },
