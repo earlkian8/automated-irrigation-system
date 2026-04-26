@@ -5,10 +5,11 @@ const fs   = require('fs');
 const path = require('path');
 const pool = require('../db');
 
-const MIGRATIONS = ['001_init.sql', '002_activity_log.sql'];
+const MIGRATIONS = ['001_init.sql', '002_activity_log.sql', '003_device_tokens.sql'];
 
 // Drop order must respect FK constraints (children before parents)
 const DROP_TABLES = [
+  'device_tokens',
   'activity_log',
   'sensor_readings',
   'water_events',

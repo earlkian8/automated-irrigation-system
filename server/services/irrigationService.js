@@ -1,5 +1,6 @@
 // services/irrigationService.js
-const plantStore = require('../models/plantStore');
+const plantStore          = require('../models/plantStore');
+const notificationService = require('./notificationService');
 
 function getMoistureStatus(moisture) {
   if (moisture < 30) return { color: '#E57373', label: 'Dry' };
@@ -28,6 +29,12 @@ module.exports = {
 
     const event = plantStore.addWaterEvent(plantId, 'manual', amount);
     plantStore.logActivity(plantId, 'manual_irrigation', { amount });
+
+    notificationService.sendNotification(
+      'Manual Watering Started',
+      `You watered ${plant.name} with ${amount}ml`,
+      { type: 'manual_irrigation', plantId }
+    );
 
     console.log('[irrigationService] manualTrigger after addWaterEvent:', plantStore.getById(plantId).manualTrigger);
 

@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "irrigation-app",
+    "name": "PlantPulse",
     "slug": "irrigation-app",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -9,7 +9,8 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.earlkian8.irrigationapp"
     },
     "android": {
       "package": "com.earlkian8.irrigationapp",
@@ -31,6 +32,7 @@
     },
     "plugins": [
       "expo-router",
+      "expo-notifications",
       [
         "expo-image-picker",
         {

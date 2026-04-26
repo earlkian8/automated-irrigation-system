@@ -67,3 +67,24 @@ export const fetchActivityLog = async (limit = 50) => {
   if (!res.ok) throw new Error('Failed to fetch activity log');
   return res.json();
 };
+
+// Push notification token registration
+export const registerPushToken = async (token, platform) => {
+  const res = await fetch(`${BASE_URL}/api/notifications/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token, platform }),
+  });
+  if (!res.ok) throw new Error('Failed to register push token');
+  return res.json();
+};
+
+export const unregisterPushToken = async (token) => {
+  const res = await fetch(`${BASE_URL}/api/notifications/register`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token }),
+  });
+  if (!res.ok) throw new Error('Failed to unregister push token');
+  return res.json();
+};
