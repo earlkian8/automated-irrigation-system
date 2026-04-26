@@ -1,9 +1,12 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import AppHeader from '@/components/AppHeader';
 import StatCard from '@/components/analytics/statscard';
 import WeeklyChart from '@/components/analytics/weeklychart';
 import Colors from '@/constants/colors';
 import { PlantContext } from '@/context/PlantContext';
 import { fetchActivityLog, fetchAnalyticsSummary } from '@/services/api';
+
+const ANALYTICS_CACHE_KEY = 'analytics_cache';
 import * as Haptics from 'expo-haptics';
 import { Activity, ChevronLeft, ChevronRight, Droplet, Droplets, Settings, Server, Zap } from 'lucide-react-native';
 import React, { useCallback, useContext, useEffect, useState } from 'react';
@@ -48,15 +51,16 @@ export default function Analytics() {
 
   const load = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
-    else setLoading(true);
     setError(null);
     try {
       const [data, log] = await Promise.all([
         fetchAnalyticsSummary(),
         fetchActivityLog(50),
       ]);
+      const filtered = log.filter(e => e.event_type !== 'sensor_reading');
       setSummary(data);
-      setActivity(log.filter(e => e.event_type !== 'sensor_reading'));
+      setActivity(filtered);
+      AsyncStorage.setItem(ANALYTICS_CACHE_KEY, JSON.stringify({ summary: data, activity: filtered })).catch(() => {});
     } catch (e) {
       setError(e.message);
     } finally {
@@ -65,7 +69,18 @@ export default function Analytics() {
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    AsyncStorage.getItem(ANALYTICS_CACHE_KEY).then(raw => {
+      if (raw) {
+        const { summary: s, activity: a } = JSON.parse(raw);
+        setSummary(s);
+        setActivity(a);
+        setLoading(false);
+      }
+    }).catch(() => {}).finally(() => {
+      load();
+    });
+  }, [load]);
   useEffect(() => { setActivityPage(0); }, [activity]);
 
   // Single plant stats

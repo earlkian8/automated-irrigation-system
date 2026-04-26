@@ -1,11 +1,4 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
-import Constants from 'expo-constants';
-import { Platform } from 'react-native';
-import { registerPushToken } from './api';
-
-const PUSH_TOKEN_KEY = 'push_token';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -15,64 +8,5 @@ Notifications.setNotificationHandler({
   }),
 });
 
-export async function registerForPushNotifications() {
-  if (!Device.isDevice) {
-    console.log('[notifications] Push notifications require a physical device');
-    return null;
-  }
-
-  // Return cached token immediately — avoids slow Expo server call on every launch
-  const cached = await AsyncStorage.getItem(PUSH_TOKEN_KEY).catch(() => null);
-  if (cached) return cached;
-
-  if (Platform.OS === 'android') {
-    await Notifications.setNotificationChannelAsync('irrigation', {
-      name: 'Irrigation Alerts',
-      importance: Notifications.AndroidImportance.HIGH,
-      vibrationPattern: [0, 250, 250, 250],
-      lightColor: '#4DB6AC',
-    });
-  }
-
-  const { status: existingStatus } = await Notifications.getPermissionsAsync();
-  let finalStatus = existingStatus;
-
-  if (existingStatus !== 'granted') {
-    const { status } = await Notifications.requestPermissionsAsync();
-    finalStatus = status;
-  }
-
-  if (finalStatus !== 'granted') {
-    console.log('[notifications] Permission not granted');
-    return null;
-  }
-
-  const projectId = Constants.expoConfig?.extra?.eas?.projectId;
-  const { data: token } = await Notifications.getExpoPushTokenAsync({ projectId });
-
-  try {
-    await registerPushToken(token, Platform.OS);
-    await AsyncStorage.setItem(PUSH_TOKEN_KEY, token);
-    console.log('[notifications] Token registered:', token);
-  } catch (err) {
-    console.warn('[notifications] Token registration failed:', err.message);
-  }
-
-  return token;
-}
-
-export function setupNotificationHandlers() {
-  const foregroundSub = Notifications.addNotificationReceivedListener(notification => {
-    console.log('[notifications] Foreground:', notification.request.content.title);
-  });
-
-  const responseSub = Notifications.addNotificationResponseReceivedListener(response => {
-    const data = response.notification.request.content.data;
-    console.log('[notifications] Tapped:', data);
-  });
-
-  return () => {
-    foregroundSub.remove();
-    responseSub.remove();
-  };
-}
+export function registerForPushNotifications() {}
+export function setupNotificationHandlers() { return () => {}; }
