@@ -1,6 +1,6 @@
 import Colors from '@/constants/colors';
 import { useRouter } from 'expo-router';
-import { Droplet, Flower2, Leaf, Repeat, Sliders, Zap } from 'lucide-react-native';
+import { Clock, Droplet, Flower2, Leaf, Repeat, Sliders, Zap } from 'lucide-react-native';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
@@ -20,6 +20,21 @@ function getModeIcon(mode) {
   }
 }
 
+function getNextWateringShort(ts) {
+  if (!ts) return null;
+  const d = new Date(ts);
+  const now = new Date();
+  if (d <= now) return null;
+  const diffMs = d - now;
+  const diffH = diffMs / 3600000;
+  if (diffH > 48) return null; // only show if within 2 days
+  const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+  const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1); tomorrow.setHours(0,0,0,0);
+  const today = new Date(); today.setHours(0,0,0,0);
+  if (d >= today && d < tomorrow) return `Today ${time}`;
+  return `Tomorrow ${time}`;
+}
+
 const PlantDashboard = ({ plant }) => {
   const router = useRouter();
   const moisture = plant.moisture ?? 0;
@@ -27,6 +42,7 @@ const PlantDashboard = ({ plant }) => {
   const clamped = Math.min(100, Math.max(0, moisture));
   const { plantType, potSize, irrigationMode } = plant.config ?? {};
   const { Icon, color: modeColor, label: modeLabel } = getModeIcon(irrigationMode);
+  const nextLabel = getNextWateringShort(plant.nextIrrigation);
 
   return (
     <Pressable
@@ -83,6 +99,14 @@ const PlantDashboard = ({ plant }) => {
         <View style={styles.track}>
           <View style={[styles.fill, { width: `${clamped}%`, backgroundColor: status.color }]} />
         </View>
+
+        {/* Next watering chip */}
+        {nextLabel && (
+          <View style={styles.nextRow}>
+            <Clock size={10} color={Colors.primary} />
+            <Text style={styles.nextText}>{nextLabel}</Text>
+          </View>
+        )}
       </View>
     </Pressable>
   );
@@ -183,5 +207,16 @@ const styles = StyleSheet.create({
   fill: {
     height: '100%',
     borderRadius: 2,
+  },
+  nextRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 2,
+  },
+  nextText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: Colors.primary,
   },
 });

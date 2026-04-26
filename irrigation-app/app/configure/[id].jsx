@@ -4,7 +4,7 @@ import { PlantContext } from '@/context/PlantContext';
 import { previewIrrigationParams, saveConfig } from '@/services/api';
 import * as Haptics from 'expo-haptics';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { Check, Droplet, Info, Leaf, Thermometer, X, Zap } from 'lucide-react-native';
+import { CalendarDays, Check, ChevronDown, ChevronUp, Clock, Droplet, Info, Leaf, Minus, Plus, Sparkles, Thermometer, X, Zap } from 'lucide-react-native';
 import React, { useCallback, useContext, useEffect, useState } from 'react';
 import {
   ActivityIndicator, Platform, Pressable, ScrollView,
@@ -35,6 +35,49 @@ const WATER_LEVEL_COLOR = {
 const POT_SIZES        = ['Small', 'Medium', 'Large'];
 const IRRIGATION_MODES = ['Automatic', 'Manual', 'Hybrid'];
 const SCHEDULE_TYPES   = ['Daily', 'Every X Days', 'Custom'];
+
+// Smart schedule recommendations per plant type (for indoor plants)
+const SCHEDULE_RECS = {
+  'Fern':         { type: 'Daily',       days: 1,  note: 'Ferns love consistent moisture — water daily to keep soil evenly moist.' },
+  'Peace Lily':   { type: 'Daily',       days: 1,  note: 'Peace lilies droop when thirsty — daily watering keeps them happy.' },
+  'Pothos':       { type: 'Every X Days', days: 3, note: 'Let soil dry slightly between waterings — every 2-3 days works well.' },
+  'Monstera':     { type: 'Every X Days', days: 3, note: 'Water when the top inch of soil is dry, roughly every 3 days.' },
+  'Spider Plant': { type: 'Every X Days', days: 2, note: 'Prefer evenly moist soil — every 2 days is ideal indoors.' },
+  'Orchid':       { type: 'Every X Days', days: 7, note: 'Orchids need to dry out between waterings — once a week is perfect.' },
+  'Snake Plant':  { type: 'Every X Days', days: 7, note: 'Less is more — snake plants hate overwatering. Once a week max.' },
+  'Aloe Vera':    { type: 'Every X Days', days: 10, note: 'Allow soil to fully dry before watering again — every 10-14 days.' },
+  'Succulent':    { type: 'Every X Days', days: 14, note: 'Succulents store water in their leaves — every 2 weeks is plenty.' },
+  'Cactus':       { type: 'Every X Days', days: 21, note: 'Water sparingly — once every 3 weeks in spring/summer.' },
+};
+
+function getNextWateringLabel(scheduleType, scheduleTime, scheduleDays) {
+  const now  = new Date();
+  const [h, m] = scheduleTime.split(':').map(Number);
+  if (isNaN(h) || isNaN(m)) return null;
+
+  const base = new Date();
+  base.setHours(h, m, 0, 0);
+
+  let next;
+  if (scheduleType === 'Daily') {
+    next = base > now ? base : new Date(base.getTime() + 86400000);
+  } else if (scheduleType === 'Every X Days') {
+    const days = Math.max(1, parseInt(scheduleDays) || 1);
+    next = new Date(base);
+    while (next <= now) next.setDate(next.getDate() + days);
+  } else {
+    return null;
+  }
+
+  const today    = new Date(); today.setHours(0, 0, 0, 0);
+  const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1);
+  const dayAfter = new Date(today); dayAfter.setDate(today.getDate() + 2);
+  const timeStr  = next.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+
+  if (next >= today && next < tomorrow) return `Today at ${timeStr}`;
+  if (next >= tomorrow && next < dayAfter) return `Tomorrow at ${timeStr}`;
+  return next.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' }) + ` at ${timeStr}`;
+}
 
 // ── Sub-components ────────────────────────────────────────
 function OptionPicker({ label, options, selected, onSelect, hint }) {
@@ -167,6 +210,89 @@ function SmartDefaultsCard({ plantType, soilVolume, thresholdOverridden, manualT
           </View>
         </>
       )}
+    </View>
+  );
+}
+
+// ── Time picker ───────────────────────────────────────────
+function TimeUnit({ value, onUp, onDown }) {
+  return (
+    <View style={styles.timeUnit}>
+      <Pressable onPress={onUp} hitSlop={10} style={styles.timeArrow}>
+        <ChevronUp size={16} color={Colors.primary} />
+      </Pressable>
+      <View style={styles.timeValueBox}>
+        <Text style={styles.timeValue}>{value}</Text>
+      </View>
+      <Pressable onPress={onDown} hitSlop={10} style={styles.timeArrow}>
+        <ChevronDown size={16} color={Colors.primary} />
+      </Pressable>
+    </View>
+  );
+}
+
+function TimePicker({ value, onChange }) {
+  const parts  = value.split(':');
+  const hours   = parseInt(parts[0]) || 0;
+  const minutes = parseInt(parts[1]) || 0;
+
+  const setH = (delta) => {
+    const newH = ((hours + delta) % 24 + 24) % 24;
+    onChange(`${String(newH).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
+  const setM = (delta) => {
+    const newM = ((minutes + delta) % 60 + 60) % 60;
+    onChange(`${String(hours).padStart(2, '0')}:${String(newM).padStart(2, '0')}`);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
+  const toggleAmPm = () => {
+    setH(hours < 12 ? 12 : -12);
+  };
+
+  const displayH = hours % 12 || 12;
+  const ampm = hours < 12 ? 'AM' : 'PM';
+
+  return (
+    <View style={styles.timePickerWrapper}>
+      <Clock size={16} color={Colors.primary} style={{ marginRight: 4 }} />
+      <View style={styles.timePicker}>
+        <TimeUnit
+          value={String(displayH).padStart(2, '0')}
+          onUp={() => setH(1)}
+          onDown={() => setH(-1)}
+        />
+        <Text style={styles.timeColon}>:</Text>
+        <TimeUnit
+          value={String(minutes).padStart(2, '0')}
+          onUp={() => setM(5)}
+          onDown={() => setM(-5)}
+        />
+        <Pressable onPress={toggleAmPm} style={styles.ampmBtn}>
+          <Text style={styles.ampmText}>{ampm}</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+// ── Day interval stepper ──────────────────────────────────
+function DayStepper({ value, onChange }) {
+  const n = parseInt(value) || 1;
+  const dec = () => { if (n > 1) { onChange(String(n - 1)); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); } };
+  const inc = () => { onChange(String(n + 1)); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); };
+  return (
+    <View style={styles.stepper}>
+      <Pressable onPress={dec} style={[styles.stepBtn, n <= 1 && styles.stepBtnDisabled]} disabled={n <= 1}>
+        <Minus size={16} color={n <= 1 ? Colors.border : Colors.primary} />
+      </Pressable>
+      <View style={styles.stepValue}>
+        <Text style={styles.stepValueText}>{n}</Text>
+        <Text style={styles.stepValueUnit}>day{n !== 1 ? 's' : ''}</Text>
+      </View>
+      <Pressable onPress={inc} style={styles.stepBtn}>
+        <Plus size={16} color={Colors.primary} />
+      </Pressable>
     </View>
   );
 }
@@ -423,40 +549,107 @@ export default function ConfigureScreen() {
                   'Waters when dry AND when you press the button.'
                 }
               />
+            </View>
 
-              <OptionPicker
-                label="Schedule"
-                options={SCHEDULE_TYPES}
-                selected={scheduleType}
-                onSelect={setScheduleType}
-              />
+            {/* ── Schedule ─────────────────────────────────── */}
+            <Text style={styles.sectionTitle}>Schedule</Text>
 
+            {/* Smart recommendation banner */}
+            {(() => {
+              const rec = SCHEDULE_RECS[plantType];
+              if (!rec) return null;
+              const alreadyMatches =
+                scheduleType === rec.type &&
+                (rec.type === 'Daily' || String(scheduleDays) === String(rec.days));
+              return (
+                <Pressable
+                  style={styles.recBanner}
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                    setScheduleType(rec.type);
+                    if (rec.days) setScheduleDays(String(rec.days));
+                  }}
+                >
+                  <Sparkles size={14} color="#F59E0B" />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.recTitle}>
+                      Recommended for {plantType}
+                      {alreadyMatches ? ' ✓' : '  — tap to apply'}
+                    </Text>
+                    <Text style={styles.recNote}>{rec.note}</Text>
+                  </View>
+                </Pressable>
+              );
+            })()}
+
+            <View style={styles.card}>
+              {/* Schedule type picker */}
+              <View style={styles.fieldGroup}>
+                <Text style={styles.fieldLabel}>Frequency</Text>
+                <View style={styles.scheduleTypeRow}>
+                  {[
+                    { key: 'Daily',       icon: CalendarDays, label: 'Daily' },
+                    { key: 'Every X Days', icon: CalendarDays, label: 'Interval' },
+                    { key: 'Custom',      icon: CalendarDays, label: 'Custom' },
+                  ].map(({ key, icon: Icon, label }) => {
+                    const active = scheduleType === key;
+                    return (
+                      <Pressable
+                        key={key}
+                        style={[styles.scheduleTypeChip, active && styles.scheduleTypeChipActive]}
+                        onPress={() => {
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                          setScheduleType(key);
+                        }}
+                      >
+                        <Icon size={14} color={active ? Colors.white : Colors.textSecondary} />
+                        <Text style={[styles.scheduleTypeLabel, active && styles.scheduleTypeLabelActive]}>
+                          {label}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+
+              {/* Interval stepper */}
               {scheduleType === 'Every X Days' && (
                 <View style={styles.fieldGroup}>
-                  <Text style={styles.fieldLabel}>Interval (Days)</Text>
-                  <TextInput
-                    style={styles.textInput}
-                    value={scheduleDays}
-                    onChangeText={setScheduleDays}
-                    keyboardType="numeric"
-                    placeholder="e.g. 3"
-                    placeholderTextColor={Colors.textSecondary + '80'}
-                  />
+                  <Text style={styles.fieldLabel}>Water every</Text>
+                  <DayStepper value={scheduleDays} onChange={setScheduleDays} />
                 </View>
               )}
 
+              {scheduleType === 'Custom' && (
+                <View style={[styles.fieldGroup, styles.customPlaceholder]}>
+                  <Info size={14} color={Colors.textSecondary} />
+                  <Text style={styles.customPlaceholderText}>
+                    Custom scheduling coming soon. Use Daily or Interval for now.
+                  </Text>
+                </View>
+              )}
+
+              {/* Time picker */}
               <View style={styles.fieldGroup}>
-                <Text style={styles.fieldLabel}>Watering Time</Text>
-                <TextInput
-                  style={styles.textInput}
-                  value={scheduleTime}
-                  onChangeText={setScheduleTime}
-                  placeholder="e.g. 08:00"
-                  placeholderTextColor={Colors.textSecondary + '80'}
-                />
+                <Text style={styles.fieldLabel}>Watering time</Text>
+                <TimePicker value={scheduleTime} onChange={setScheduleTime} />
               </View>
 
-              {/* Manual threshold override toggle */}
+              {/* Next watering preview */}
+              {(() => {
+                const label = getNextWateringLabel(scheduleType, scheduleTime, scheduleDays);
+                if (!label) return null;
+                return (
+                  <View style={styles.nextWaterPreview}>
+                    <Clock size={12} color={Colors.primary} />
+                    <Text style={styles.nextWaterText}>
+                      Next watering: <Text style={styles.nextWaterBold}>{label}</Text>
+                    </Text>
+                  </View>
+                );
+              })()}
+
+              {/* Threshold override toggle */}
               <View style={[styles.fieldGroup, styles.toggleRow]}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.fieldLabel}>Override Moisture Threshold</Text>
@@ -551,4 +744,133 @@ const styles = StyleSheet.create({
   emptyText:       { fontSize: 18, fontWeight: '600', color: Colors.text },
   backLink:        { marginTop: 16 },
   backLinkText:    { fontSize: 16, fontWeight: '600', color: Colors.primary },
+
+  // Smart recommendation banner
+  recBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    backgroundColor: '#FEF3C720',
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: '#F59E0B40',
+    padding: 14,
+    marginBottom: 10,
+  },
+  recTitle: { fontSize: 12, fontWeight: '700', color: '#B45309', marginBottom: 3 },
+  recNote:  { fontSize: 11, color: '#92400E', lineHeight: 16 },
+
+  // Schedule type chips
+  scheduleTypeRow: { flexDirection: 'row', gap: 8 },
+  scheduleTypeChip: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: Colors.background,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  scheduleTypeChipActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
+  scheduleTypeLabel: { fontSize: 12, fontWeight: '700', color: Colors.textSecondary },
+  scheduleTypeLabelActive: { color: Colors.white },
+
+  // TimePicker
+  timePickerWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  timePicker: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: Colors.background,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  timeUnit: { alignItems: 'center', gap: 2 },
+  timeArrow: { padding: 4 },
+  timeValueBox: {
+    backgroundColor: Colors.primary + '12',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    minWidth: 44,
+    alignItems: 'center',
+  },
+  timeValue: { fontSize: 22, fontWeight: '800', color: Colors.primary, letterSpacing: -0.5 },
+  timeColon: { fontSize: 24, fontWeight: '800', color: Colors.primary, marginBottom: 2 },
+  ampmBtn: {
+    backgroundColor: Colors.primary + '18',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginLeft: 4,
+  },
+  ampmText: { fontSize: 13, fontWeight: '800', color: Colors.primary },
+
+  // Day stepper
+  stepper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 0,
+    alignSelf: 'flex-start',
+    backgroundColor: Colors.background,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    overflow: 'hidden',
+  },
+  stepBtn: {
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    backgroundColor: Colors.background,
+  },
+  stepBtnDisabled: { opacity: 0.4 },
+  stepValue: {
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderColor: Colors.border,
+    paddingVertical: 10,
+  },
+  stepValueText: { fontSize: 20, fontWeight: '800', color: Colors.primary },
+  stepValueUnit: { fontSize: 10, fontWeight: '600', color: Colors.textSecondary },
+
+  // Next watering preview
+  nextWaterPreview: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: Colors.primary + '0E',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 4,
+    borderWidth: 1,
+    borderColor: Colors.primary + '20',
+  },
+  nextWaterText: { fontSize: 12, color: Colors.textSecondary, flex: 1 },
+  nextWaterBold: { fontWeight: '700', color: Colors.primary },
+
+  // Custom schedule placeholder
+  customPlaceholder: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: Colors.background,
+    borderRadius: 10,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  customPlaceholderText: { fontSize: 12, color: Colors.textSecondary, flex: 1, lineHeight: 17 },
 });
