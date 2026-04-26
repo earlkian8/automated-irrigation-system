@@ -1,8 +1,11 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { registerPushToken } from './api';
+
+const PUSH_TOKEN_KEY = 'push_token';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -17,6 +20,10 @@ export async function registerForPushNotifications() {
     console.log('[notifications] Push notifications require a physical device');
     return null;
   }
+
+  // Return cached token immediately — avoids slow Expo server call on every launch
+  const cached = await AsyncStorage.getItem(PUSH_TOKEN_KEY).catch(() => null);
+  if (cached) return cached;
 
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync('irrigation', {
@@ -45,6 +52,7 @@ export async function registerForPushNotifications() {
 
   try {
     await registerPushToken(token, Platform.OS);
+    await AsyncStorage.setItem(PUSH_TOKEN_KEY, token);
     console.log('[notifications] Token registered:', token);
   } catch (err) {
     console.warn('[notifications] Token registration failed:', err.message);
