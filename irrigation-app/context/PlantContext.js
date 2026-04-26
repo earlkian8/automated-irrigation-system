@@ -1,6 +1,9 @@
 // context/PlantContext.js
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { fetchAllPlants, fetchPlantById } from '@/services/api';
 import { createContext, useCallback, useEffect, useRef, useState } from 'react';
+
+const CACHE_KEY = 'plants_cache';
 
 export const PlantContext = createContext();
 
@@ -28,6 +31,7 @@ export const PlantProvider = ({ children }) => {
         });
       });
       setError(null);
+      AsyncStorage.setItem(CACHE_KEY, JSON.stringify(data)).catch(() => {});
     } catch (e) {
       setError('Could not reach server');
     } finally {
@@ -59,7 +63,17 @@ export const PlantProvider = ({ children }) => {
   }, [refreshPlant]);
 
   useEffect(() => {
-    fetchPlants();
+    // Load cached plants instantly so the UI is never blank on cold start
+    AsyncStorage.getItem(CACHE_KEY).then(raw => {
+      if (raw) {
+        const cached = JSON.parse(raw);
+        setPlants(cached);
+        setLoading(false);
+      }
+    }).catch(() => {}).finally(() => {
+      fetchPlants();
+    });
+
     // Poll every 5 s for live sensor data
     const interval = setInterval(fetchPlants, 5000);
     return () => clearInterval(interval);
