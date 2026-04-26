@@ -233,14 +233,38 @@ function SmartDefaultsCard({ plantType, soilVolume, thresholdOverridden, manualT
 }
 
 // ── Time picker ───────────────────────────────────────────
-function TimeUnit({ value, onUp, onDown }) {
+// Arrows increment/decrement; tapping the number lets you type directly.
+function TimeUnit({ value, onUp, onDown, onCommit, maxVal, minVal = 0 }) {
+  const [draft, setDraft]     = useState(value);
+  const [editing, setEditing] = useState(false);
+
+  // Sync displayed value when arrows move it externally
+  useEffect(() => { if (!editing) setDraft(value); }, [value, editing]);
+
+  const handleBlur = () => {
+    setEditing(false);
+    const n = parseInt(draft, 10);
+    const clamped = isNaN(n) ? parseInt(value, 10) : Math.max(minVal, Math.min(maxVal, n));
+    onCommit(clamped);
+  };
+
   return (
     <View style={styles.timeUnit}>
       <Pressable onPress={onUp} hitSlop={10} style={styles.timeArrow}>
         <ChevronUp size={16} color={Colors.primary} />
       </Pressable>
       <View style={styles.timeValueBox}>
-        <Text style={styles.timeValue}>{value}</Text>
+        <TextInput
+          style={styles.timeValue}
+          value={editing ? draft : value}
+          onChangeText={t => setDraft(t.replace(/\D/g, ''))}
+          onFocus={() => { setEditing(true); setDraft(value); }}
+          onBlur={handleBlur}
+          keyboardType="number-pad"
+          maxLength={2}
+          selectTextOnFocus
+          textAlign="center"
+        />
       </View>
       <Pressable onPress={onDown} hitSlop={10} style={styles.timeArrow}>
         <ChevronDown size={16} color={Colors.primary} />
@@ -250,7 +274,7 @@ function TimeUnit({ value, onUp, onDown }) {
 }
 
 function TimePicker({ value, onChange }) {
-  const parts  = value.split(':');
+  const parts   = value.split(':');
   const hours   = parseInt(parts[0]) || 0;
   const minutes = parseInt(parts[1]) || 0;
 
@@ -264,12 +288,23 @@ function TimePicker({ value, onChange }) {
     onChange(`${String(hours).padStart(2, '0')}:${String(newM).padStart(2, '0')}`);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
-  const toggleAmPm = () => {
-    setH(hours < 12 ? 12 : -12);
-  };
+  const toggleAmPm = () => { setH(hours < 12 ? 12 : -12); };
 
   const displayH = hours % 12 || 12;
-  const ampm = hours < 12 ? 'AM' : 'PM';
+  const ampm     = hours < 12 ? 'AM' : 'PM';
+
+  // Called when user types directly into the hour box (1-12 display)
+  const commitH = (displayVal) => {
+    const clamped = Math.max(1, Math.min(12, displayVal));
+    const newH    = hours < 12
+      ? (clamped === 12 ? 0 : clamped)
+      : (clamped === 12 ? 12 : clamped + 12);
+    onChange(`${String(newH).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`);
+  };
+
+  const commitM = (val) => {
+    onChange(`${String(hours).padStart(2, '0')}:${String(val).padStart(2, '0')}`);
+  };
 
   return (
     <View style={styles.timePickerWrapper}>
@@ -279,12 +314,18 @@ function TimePicker({ value, onChange }) {
           value={String(displayH).padStart(2, '0')}
           onUp={() => setH(1)}
           onDown={() => setH(-1)}
+          onCommit={commitH}
+          maxVal={12}
+          minVal={1}
         />
         <Text style={styles.timeColon}>:</Text>
         <TimeUnit
           value={String(minutes).padStart(2, '0')}
           onUp={() => setM(5)}
           onDown={() => setM(-5)}
+          onCommit={commitM}
+          maxVal={59}
+          minVal={0}
         />
         <Pressable onPress={toggleAmPm} style={styles.ampmBtn}>
           <Text style={styles.ampmText}>{ampm}</Text>
@@ -740,19 +781,6 @@ export default function ConfigureScreen() {
                         minVal={1}
                         unit="min"
                       />
-                      <View style={styles.presetsRow}>
-                        {['1', '5', '10', '30'].map(m => (
-                          <Pressable
-                            key={m}
-                            style={[styles.presetChip, customDelayMinutes === m && styles.presetChipActive]}
-                            onPress={() => { setCustomDelayMinutes(m); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
-                          >
-                            <Text style={[styles.presetLabel, customDelayMinutes === m && styles.presetLabelActive]}>
-                              {m}m
-                            </Text>
-                          </Pressable>
-                        ))}
-                      </View>
                     </View>
                   )}
 
@@ -991,7 +1019,7 @@ const styles = StyleSheet.create({
     minWidth: 44,
     alignItems: 'center',
   },
-  timeValue: { fontSize: 22, fontWeight: '800', color: Colors.primary, letterSpacing: -0.5 },
+  timeValue: { fontSize: 22, fontWeight: '800', color: Colors.primary, textAlign: 'center', minWidth: 44 },
   timeColon: { fontSize: 24, fontWeight: '800', color: Colors.primary, marginBottom: 2 },
   ampmBtn: {
     backgroundColor: Colors.primary + '18',

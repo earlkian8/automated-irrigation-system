@@ -4,10 +4,11 @@ import WeeklyChart from '@/components/analytics/weeklychart';
 import Colors from '@/constants/colors';
 import { PlantContext } from '@/context/PlantContext';
 import { fetchActivityLog, fetchAnalyticsSummary } from '@/services/api';
-import { Activity, Droplet, Droplets, Settings, Server, Zap } from 'lucide-react-native';
+import * as Haptics from 'expo-haptics';
+import { Activity, ChevronLeft, ChevronRight, Droplet, Droplets, Settings, Server, Zap } from 'lucide-react-native';
 import React, { useCallback, useContext, useEffect, useState } from 'react';
 import {
-  ActivityIndicator, RefreshControl, ScrollView,
+  ActivityIndicator, Pressable, RefreshControl, ScrollView,
   StyleSheet, Text, View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -36,11 +37,14 @@ export default function Analytics() {
   const { plants } = useContext(PlantContext);
   const plant = plants[0] ?? null;
 
-  const [summary, setSummary]       = useState(null);
-  const [activity, setActivity]     = useState([]);
-  const [loading, setLoading]       = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError]           = useState(null);
+  const [summary, setSummary]         = useState(null);
+  const [activity, setActivity]       = useState([]);
+  const [loading, setLoading]         = useState(true);
+  const [refreshing, setRefreshing]   = useState(false);
+  const [error, setError]             = useState(null);
+  const [activityPage, setActivityPage] = useState(0);
+
+  const PAGE_SIZE = 10;
 
   const load = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -62,6 +66,7 @@ export default function Analytics() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { setActivityPage(0); }, [activity]);
 
   // Single plant stats
   const plantStats = summary?.perPlant?.[0] ?? null;
@@ -178,32 +183,118 @@ export default function Analytics() {
           )}
 
           {/* ── Activity log ── */}
-          {activity.length > 0 && (
-            <View style={styles.card}>
-              <Text style={styles.cardTitle}>Recent Activity</Text>
-              {activity.map((entry, i) => {
-                const { icon: Icon, label, color } = activityMeta(entry.event_type);
-                return (
-                  <View
-                    key={entry.id}
-                    style={[styles.activityRow, i < activity.length - 1 && styles.activityBorder]}
-                  >
-                    <View style={[styles.activityIconBox, { backgroundColor: color + '15' }]}>
-                      <Icon size={13} color={color} />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.activityLabel}>{label}</Text>
-                      <Text style={styles.activityTime}>
-                        {new Date(entry.occurred_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                        {' · '}
-                        {new Date(entry.occurred_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
-                      </Text>
-                    </View>
+          {activity.length > 0 && (() => {
+            const totalPages  = Math.ceil(activity.length / PAGE_SIZE);
+            const pageItems   = activity.slice(activityPage * PAGE_SIZE, (activityPage + 1) * PAGE_SIZE);
+            const from        = activityPage * PAGE_SIZE + 1;
+            const to          = Math.min((activityPage + 1) * PAGE_SIZE, activity.length);
+
+            // Build page number list — show at most 5, with ellipsis for larger sets
+            const getPageNums = () => {
+              if (totalPages <= 5) return Array.from({ length: totalPages }, (_, i) => i);
+              const p = activityPage;
+              const nums = new Set([0, totalPages - 1, p]);
+              if (p > 0) nums.add(p - 1);
+              if (p < totalPages - 1) nums.add(p + 1);
+              const sorted = [...nums].sort((a, b) => a - b);
+              const result = [];
+              sorted.forEach((n, i) => {
+                if (i > 0 && n - sorted[i - 1] > 1) result.push('…');
+                result.push(n);
+              });
+              return result;
+            };
+
+            return (
+              <View style={styles.card}>
+                {/* Header row with count */}
+                <View style={styles.activityHeader}>
+                  <Text style={[styles.cardTitle, { marginBottom: 0 }]}>Recent Activity</Text>
+                  <View style={styles.activityCountBadge}>
+                    <Text style={styles.activityCountText}>{from}–{to} of {activity.length}</Text>
                   </View>
-                );
-              })}
-            </View>
-          )}
+                </View>
+
+                {/* Items */}
+                {pageItems.map((entry, i) => {
+                  const { icon: Icon, label, color } = activityMeta(entry.event_type);
+                  return (
+                    <View
+                      key={entry.id}
+                      style={[styles.activityRow, i < pageItems.length - 1 && styles.activityBorder]}
+                    >
+                      <View style={[styles.activityIconBox, { backgroundColor: color + '15' }]}>
+                        <Icon size={13} color={color} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.activityLabel}>{label}</Text>
+                        <Text style={styles.activityTime}>
+                          {new Date(entry.occurred_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                          {' · '}
+                          {new Date(entry.occurred_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
+                        </Text>
+                      </View>
+                    </View>
+                  );
+                })}
+
+                {/* Pagination controls */}
+                {totalPages > 1 && (
+                  <View style={styles.pagination}>
+                    {/* Prev */}
+                    <Pressable
+                      style={[styles.pageArrow, activityPage === 0 && styles.pageArrowDisabled]}
+                      onPress={() => {
+                        if (activityPage > 0) {
+                          setActivityPage(p => p - 1);
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        }
+                      }}
+                      disabled={activityPage === 0}
+                    >
+                      <ChevronLeft size={15} color={activityPage === 0 ? Colors.border : Colors.primary} />
+                    </Pressable>
+
+                    {/* Page numbers */}
+                    <View style={styles.pageNums}>
+                      {getPageNums().map((n, i) =>
+                        n === '…'
+                          ? <Text key={`e${i}`} style={styles.pageEllipsis}>…</Text>
+                          : (
+                            <Pressable
+                              key={n}
+                              style={[styles.pageChip, n === activityPage && styles.pageChipActive]}
+                              onPress={() => {
+                                setActivityPage(n);
+                                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                              }}
+                            >
+                              <Text style={[styles.pageChipText, n === activityPage && styles.pageChipTextActive]}>
+                                {n + 1}
+                              </Text>
+                            </Pressable>
+                          )
+                      )}
+                    </View>
+
+                    {/* Next */}
+                    <Pressable
+                      style={[styles.pageArrow, activityPage === totalPages - 1 && styles.pageArrowDisabled]}
+                      onPress={() => {
+                        if (activityPage < totalPages - 1) {
+                          setActivityPage(p => p + 1);
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        }
+                      }}
+                      disabled={activityPage === totalPages - 1}
+                    >
+                      <ChevronRight size={15} color={activityPage === totalPages - 1 ? Colors.border : Colors.primary} />
+                    </Pressable>
+                  </View>
+                )}
+              </View>
+            );
+          })()}
         </>
       ) : null}
     </ScrollView>
@@ -255,9 +346,70 @@ const styles = StyleSheet.create({
   summaryVal:     { fontSize: 14, fontWeight: '700', color: Colors.text },
 
   // Activity
-  activityRow:     { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11 },
-  activityBorder:  { borderBottomWidth: 1, borderBottomColor: Colors.border },
-  activityIconBox: { width: 32, height: 32, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  activityLabel:   { fontSize: 14, fontWeight: '600', color: Colors.text },
-  activityTime:    { fontSize: 11, color: Colors.textSecondary, marginTop: 2 },
+  activityHeader:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
+  activityCountBadge: { backgroundColor: Colors.primary + '12', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, borderColor: Colors.primary + '25' },
+  activityCountText:  { fontSize: 11, fontWeight: '700', color: Colors.primary },
+  activityRow:        { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11 },
+  activityBorder:     { borderBottomWidth: 1, borderBottomColor: Colors.border },
+  activityIconBox:    { width: 32, height: 32, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  activityLabel:      { fontSize: 14, fontWeight: '600', color: Colors.text },
+  activityTime:       { fontSize: 11, color: Colors.textSecondary, marginTop: 2 },
+
+  // Pagination
+  pagination: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: 16,
+    paddingTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+  },
+  pageNums: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  pageArrow: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: Colors.background,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pageArrowDisabled: {
+    opacity: 0.35,
+  },
+  pageChip: {
+    minWidth: 32,
+    height: 32,
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    backgroundColor: Colors.background,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pageChipActive: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  pageChipText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: Colors.textSecondary,
+  },
+  pageChipTextActive: {
+    color: Colors.white,
+  },
+  pageEllipsis: {
+    fontSize: 13,
+    color: Colors.textSecondary,
+    paddingHorizontal: 2,
+  },
 });
