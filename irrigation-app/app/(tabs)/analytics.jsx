@@ -1,36 +1,39 @@
-import PlantHealthOverview from '@/components/analytics/planthealthoverview';
 import StatCard from '@/components/analytics/statscard';
 import WeeklyChart from '@/components/analytics/weeklychart';
 import Colors from '@/constants/colors';
 import { PlantContext } from '@/context/PlantContext';
 import { fetchActivityLog, fetchAnalyticsSummary } from '@/services/api';
-import { Activity, Droplet, Droplets, Leaf, Settings, Server, Zap } from 'lucide-react-native';
+import { Activity, Droplet, Droplets, Settings, Server, Zap } from 'lucide-react-native';
 import React, { useCallback, useContext, useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
+  ActivityIndicator, RefreshControl, ScrollView,
+  StyleSheet, Text, View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 function activityMeta(eventType) {
   switch (eventType) {
-    case 'manual_irrigation':    return { icon: Droplet,   label: 'Manual Water',     color: Colors.moisture };
-    case 'auto_irrigation':      return { icon: Zap,       label: 'Auto Water',       color: Colors.primary };
-    case 'scheduled_irrigation': return { icon: Zap,       label: 'Scheduled Water',  color: Colors.primary };
-    case 'config_change':        return { icon: Settings,  label: 'Config Updated',   color: '#FFB74D' };
-    case 'trigger_cleared':      return { icon: Droplets,  label: 'Trigger Cleared',  color: '#89b4fa' };
-    case 'server_start':         return { icon: Server,    label: 'Server Start',     color: '#A0A0A0' };
-    default:                     return { icon: Activity,  label: eventType,          color: '#A0A0A0' };
+    case 'manual_irrigation':    return { icon: Droplet,  label: 'Manual Water',    color: Colors.moisture };
+    case 'auto_irrigation':      return { icon: Zap,      label: 'Auto Water',      color: Colors.primary };
+    case 'scheduled_irrigation': return { icon: Zap,      label: 'Scheduled Water', color: Colors.primary };
+    case 'config_change':        return { icon: Settings, label: 'Config Updated',  color: '#FFB74D' };
+    case 'trigger_cleared':      return { icon: Droplets, label: 'Trigger Cleared', color: '#89b4fa' };
+    case 'server_start':         return { icon: Server,   label: 'Server Start',    color: Colors.textSecondary };
+    default:                     return { icon: Activity, label: eventType,         color: Colors.textSecondary };
   }
+}
+
+function getMoistureStatus(moisture) {
+  if (moisture < 30) return { color: '#E57373', label: 'Dry' };
+  if (moisture < 50) return { color: '#FFB74D', label: 'Needs Water' };
+  if (moisture < 75) return { color: '#4DB6AC', label: 'Healthy' };
+  return               { color: '#AF97E5', label: 'Too Wet' };
 }
 
 export default function Analytics() {
   const insets = useSafeAreaInsets();
-  const { plants } = useContext(PlantContext);  // live moisture for health overview
+  const { plants } = useContext(PlantContext);
+  const plant = plants[0] ?? null;
 
   const [summary, setSummary]       = useState(null);
   const [activity, setActivity]     = useState([]);
@@ -48,7 +51,7 @@ export default function Analytics() {
         fetchActivityLog(50),
       ]);
       setSummary(data);
-      setActivity(log);
+      setActivity(log.filter(e => e.event_type !== 'sensor_reading'));
     } catch (e) {
       setError(e.message);
     } finally {
@@ -59,14 +62,19 @@ export default function Analytics() {
 
   useEffect(() => { load(); }, [load]);
 
-  // Aggregate stats across all plants
-  const totalWater = summary?.perPlant?.reduce((s, p) => s + p.totalWaterUsed, 0) ?? 0;
-  const totalSessions = summary?.perPlant?.reduce((s, p) => s + p.weeklyCount, 0) ?? 0;
+  // Single plant stats
+  const plantStats = summary?.perPlant?.[0] ?? null;
+  const weeklyWater = plantStats?.weeklyWater?.reduce((s, v) => s + v, 0) ?? 0;
+  const weeklySessions = plantStats?.weeklyCount ?? 0;
+  const totalWater = plantStats?.totalWaterUsed ?? 0;
+
+  const moisture = plant?.moisture ?? null;
+  const moistureStatus = getMoistureStatus(moisture ?? 0);
 
   return (
     <ScrollView
-      style={styles.container}
-      contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 24 }]}
+      style={styles.screen}
+      contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 24 }]}
       showsVerticalScrollIndicator={false}
       refreshControl={
         <RefreshControl
@@ -76,23 +84,56 @@ export default function Analytics() {
         />
       }
     >
-      <Text style={styles.heading}>Analytics</Text>
-      <Text style={styles.subheading}>From your database — pull down to refresh</Text>
+      {/* ── Header ── */}
+      <View style={[styles.header, { paddingTop: insets.top + 18 }]}>
+        <Text style={styles.pageTitle}>Analytics</Text>
+        <Text style={styles.pageSub}>Pull down to refresh</Text>
+      </View>
 
-      {/* ── Plant health (uses live IoT moisture, not DB) ── */}
-      <PlantHealthOverview plants={plants} />
+      {/* ── Live plant health ── */}
+      {plant && moisture !== null && (
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Plant Health</Text>
+          <View style={styles.healthRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.healthPlantName}>{plant.name}</Text>
+              <Text style={styles.healthMeta}>
+                {plant.config?.plantType} · {plant.config?.potSize} pot
+              </Text>
+            </View>
+            <View style={[styles.statusBadge, { backgroundColor: moistureStatus.color + '18', borderColor: moistureStatus.color + '40' }]}>
+              <View style={[styles.statusDot, { backgroundColor: moistureStatus.color }]} />
+              <Text style={[styles.statusLabel, { color: moistureStatus.color }]}>{moistureStatus.label}</Text>
+            </View>
+          </View>
+
+          <View style={styles.moistureBarBg}>
+            <View style={[styles.moistureBarFill, {
+              width: `${Math.min(100, Math.max(0, moisture))}%`,
+              backgroundColor: moistureStatus.color,
+            }]} />
+          </View>
+          <View style={styles.moistureBarLabels}>
+            <Text style={styles.moistureBarLabel}>0%</Text>
+            <Text style={[styles.moistureBarVal, { color: moistureStatus.color }]}>
+              {moisture.toFixed(0)}%
+            </Text>
+            <Text style={styles.moistureBarLabel}>100%</Text>
+          </View>
+        </View>
+      )}
 
       {loading && !summary ? (
         <View style={styles.centered}>
           <ActivityIndicator color={Colors.primary} />
         </View>
       ) : error ? (
-        <View style={styles.errorCard}>
+        <View style={[styles.card, styles.errorCard]}>
           <Text style={styles.errorText}>{error}</Text>
         </View>
       ) : summary ? (
         <>
-          {/* ── Weekly water chart ── */}
+          {/* ── Weekly chart ── */}
           <WeeklyChart data={summary.combinedWeeklyWater} />
 
           {/* ── Stat cards ── */}
@@ -100,65 +141,59 @@ export default function Analytics() {
             <StatCard
               icon={<Droplet size={20} color={Colors.moisture} />}
               iconColor={Colors.moisture}
-              label="Total water used"
-              value={totalWater >= 1000 ? (totalWater / 1000).toFixed(1) : totalWater}
-              unit={totalWater >= 1000 ? 'L' : 'ml'}
+              label="This week"
+              value={weeklyWater >= 1000 ? (weeklyWater / 1000).toFixed(1) : weeklyWater}
+              unit={weeklyWater >= 1000 ? 'L' : 'ml'}
             />
             <StatCard
               icon={<Droplets size={20} color={Colors.primary} />}
               iconColor={Colors.primary}
               label="Sessions this week"
-              value={totalSessions}
+              value={weeklySessions}
             />
           </View>
 
-          {/* ── Per-plant breakdown ── */}
-          {summary.perPlant.map(p => {
-            const plant = plants.find(pl => pl.id === p.plantId);
-            if (!plant) return null;
-            return (
-              <View key={p.plantId} style={styles.plantCard}>
-                <View style={styles.plantCardHeader}>
-                  <Leaf size={15} color={Colors.primary} />
-                  <Text style={styles.plantCardTitle}>{plant.name}</Text>
-                </View>
-                <View style={styles.plantCardRow}>
-                  <Text style={styles.plantCardLabel}>Water this week</Text>
-                  <Text style={styles.plantCardValue}>
-                    {p.weeklyWater.reduce((s, v) => s + v, 0)} ml
-                  </Text>
-                </View>
-                <View style={styles.plantCardRow}>
-                  <Text style={styles.plantCardLabel}>Sessions this week</Text>
-                  <Text style={styles.plantCardValue}>{p.weeklyCount}</Text>
-                </View>
-                <View style={styles.plantCardRow}>
-                  <Text style={styles.plantCardLabel}>Total water ever</Text>
-                  <Text style={styles.plantCardValue}>{p.totalWaterUsed} ml</Text>
-                </View>
+          {/* ── Plant water summary ── */}
+          {plantStats && (
+            <View style={styles.card}>
+              <Text style={styles.cardTitle}>Water Summary</Text>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>This week</Text>
+                <Text style={styles.summaryVal}>{weeklyWater} ml</Text>
               </View>
-            );
-          })}
+              <View style={styles.summaryDivider} />
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Sessions this week</Text>
+                <Text style={styles.summaryVal}>{weeklySessions}</Text>
+              </View>
+              <View style={styles.summaryDivider} />
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Total water ever</Text>
+                <Text style={styles.summaryVal}>{totalWater} ml</Text>
+              </View>
+            </View>
+          )}
 
-          {/* ── Recent activity log ── */}
+          {/* ── Activity log ── */}
           {activity.length > 0 && (
-            <View style={styles.activityCard}>
-              <View style={styles.activityHeader}>
-                <Activity size={15} color={Colors.primary} />
-                <Text style={styles.activityTitle}>Recent Activity</Text>
-              </View>
-              {activity.map((entry) => {
+            <View style={styles.card}>
+              <Text style={styles.cardTitle}>Recent Activity</Text>
+              {activity.map((entry, i) => {
                 const { icon: Icon, label, color } = activityMeta(entry.event_type);
                 return (
-                  <View key={entry.id} style={styles.activityRow}>
-                    <View style={[styles.activityDot, { backgroundColor: color + '20' }]}>
+                  <View
+                    key={entry.id}
+                    style={[styles.activityRow, i < activity.length - 1 && styles.activityBorder]}
+                  >
+                    <View style={[styles.activityIconBox, { backgroundColor: color + '15' }]}>
                       <Icon size={13} color={color} />
                     </View>
-                    <View style={styles.activityInfo}>
+                    <View style={{ flex: 1 }}>
                       <Text style={styles.activityLabel}>{label}</Text>
                       <Text style={styles.activityTime}>
-                        {new Date(entry.occurred_at).toLocaleDateString()} {' '}
-                        {new Date(entry.occurred_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        {new Date(entry.occurred_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                        {' · '}
+                        {new Date(entry.occurred_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
                       </Text>
                     </View>
                   </View>
@@ -172,27 +207,58 @@ export default function Analytics() {
   );
 }
 
+const CARD = {
+  backgroundColor: Colors.card,
+  borderRadius: 18,
+  padding: 18,
+  marginBottom: 12,
+  shadowColor: '#000',
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.07,
+  shadowRadius: 10,
+  elevation: 2,
+};
+
 const styles = StyleSheet.create({
-  container:        { flex: 1, backgroundColor: Colors.background },
-  content:          { paddingHorizontal: 20, paddingTop: 16 },
-  heading:          { fontSize: 26, fontWeight: '800', color: Colors.text, marginBottom: 2 },
-  subheading:       { fontSize: 12, color: Colors.textSecondary, marginBottom: 20 },
-  centered:         { alignItems: 'center', paddingVertical: 32 },
-  statRow:          { flexDirection: 'row', justifyContent: 'space-between' },
-  errorCard:        { backgroundColor: Colors.card, borderRadius: 16, padding: 16, marginBottom: 16 },
-  errorText:        { color: Colors.critical, fontSize: 13 },
-  plantCard:        { backgroundColor: Colors.card, borderRadius: 16, padding: 16, marginBottom: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8, elevation: 2 },
-  plantCardHeader:  { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12 },
-  plantCardTitle:   { fontSize: 15, fontWeight: '700', color: Colors.text },
-  plantCardRow:     { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 5, borderBottomWidth: 1, borderBottomColor: Colors.border },
-  plantCardLabel:   { fontSize: 13, color: Colors.textSecondary },
-  plantCardValue:   { fontSize: 13, fontWeight: '600', color: Colors.text },
-  activityCard:     { backgroundColor: Colors.card, borderRadius: 16, padding: 16, marginBottom: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8, elevation: 2 },
-  activityHeader:   { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12 },
-  activityTitle:    { fontSize: 15, fontWeight: '700', color: Colors.text },
-  activityRow:      { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: Colors.border },
-  activityDot:      { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-  activityInfo:     { flex: 1 },
-  activityLabel:    { fontSize: 13, fontWeight: '600', color: Colors.text },
-  activityTime:     { fontSize: 11, color: Colors.textSecondary, marginTop: 1 },
+  screen:   { flex: 1, backgroundColor: Colors.background },
+  scroll:   { paddingHorizontal: 20 },
+  centered: { alignItems: 'center', paddingVertical: 32 },
+
+  header:    { marginBottom: 20 },
+  pageTitle: { fontSize: 26, fontWeight: '800', color: Colors.text, letterSpacing: -0.6 },
+  pageSub:   { fontSize: 13, color: Colors.textSecondary, marginTop: 3, fontWeight: '500' },
+
+  card:      { ...CARD },
+  cardTitle: { fontSize: 10, fontWeight: '800', color: Colors.textSecondary, textTransform: 'uppercase', letterSpacing: 1.4, marginBottom: 14 },
+
+  errorCard: { borderWidth: 1, borderColor: Colors.critical + '30' },
+  errorText: { fontSize: 13, color: Colors.critical, fontWeight: '600' },
+
+  // Health card
+  healthRow:       { flexDirection: 'row', alignItems: 'center', marginBottom: 14 },
+  healthPlantName: { fontSize: 16, fontWeight: '700', color: Colors.text },
+  healthMeta:      { fontSize: 12, color: Colors.textSecondary, marginTop: 2 },
+  statusBadge:     { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, borderWidth: 1 },
+  statusDot:       { width: 6, height: 6, borderRadius: 3 },
+  statusLabel:     { fontSize: 12, fontWeight: '700' },
+  moistureBarBg:   { height: 8, backgroundColor: Colors.border, borderRadius: 6, overflow: 'hidden', marginBottom: 6 },
+  moistureBarFill: { height: '100%', borderRadius: 6 },
+  moistureBarLabels:{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  moistureBarLabel: { fontSize: 11, color: Colors.textSecondary },
+  moistureBarVal:   { fontSize: 13, fontWeight: '800' },
+
+  statRow: { flexDirection: 'row', justifyContent: 'space-between' },
+
+  // Summary card
+  summaryRow:     { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 11 },
+  summaryDivider: { height: 1, backgroundColor: Colors.border },
+  summaryLabel:   { fontSize: 14, fontWeight: '500', color: Colors.textSecondary },
+  summaryVal:     { fontSize: 14, fontWeight: '700', color: Colors.text },
+
+  // Activity
+  activityRow:     { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11 },
+  activityBorder:  { borderBottomWidth: 1, borderBottomColor: Colors.border },
+  activityIconBox: { width: 32, height: 32, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  activityLabel:   { fontSize: 14, fontWeight: '600', color: Colors.text },
+  activityTime:    { fontSize: 11, color: Colors.textSecondary, marginTop: 2 },
 });
