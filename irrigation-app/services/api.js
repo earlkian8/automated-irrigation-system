@@ -1,5 +1,5 @@
 // services/api.js
-export const BASE_URL = 'http://192.168.254.105:3000';
+export const BASE_URL = 'http://urchin-app-idc22.ondigitalocean.app';
 
 // Plants
 export const fetchAllPlants = async () => {

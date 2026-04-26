@@ -23,6 +23,6 @@ app.use('/api', analyticsRoutes);
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, '0.0.0.0', async () => {
   console.log(`Server running on port ${PORT}`);
-//   await initFromDB();   // hydrate in-memory cache from DB before accepting requests
+  await initFromDB();   // hydrate in-memory cache from DB before accepting requests
   startScheduler();
 });
